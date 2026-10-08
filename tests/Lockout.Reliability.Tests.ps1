@@ -51,7 +51,7 @@ Describe 'Restart and source failures' {
         $script:root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $global:LockoutFixture = @{
             Events = @{}; Latest = @{}; Oldest = @{}
-            Failed = ''; MailFailed = $false; MailSent = 0
+            Failed = ''; FailedQuery = ''; MailFailed = $false; MailSent = 0
             CrashOnState = $false
         }
         foreach ($dc in @($script:dcA,$script:dcB)) {
@@ -77,7 +77,7 @@ Describe 'Restart and source failures' {
             }
         }
         Mock -ModuleName Lockout.Runner -CommandName Get-LockoutWindow {
-            if ($global:LockoutFixture.Failed -eq $DomainController) { throw 'Simulated RPC loss mid-query' }
+            if ($global:LockoutFixture.FailedQuery -eq $DomainController) { throw 'Simulated RPC loss mid-query' }
             return @($global:LockoutFixture.Events[$DomainController] | Where-Object {
                 [long]$_.RecordId -gt [long]$AfterId -and [long]$_.RecordId -le [long]$UntilId
             })
@@ -85,6 +85,20 @@ Describe 'Restart and source failures' {
     }
 
     AfterEach { Remove-Variable -Name LockoutFixture -Scope Global -ErrorAction SilentlyContinue }
+
+    It 'does not advance checkpoint on an RPC failure during event query and catches up after reconnect' {
+        $global:LockoutFixture.Events[$script:dcA] = @(New-TestEvent 1 $script:dcA)
+        Invoke-LockoutMonitor -Config $script:config
+        $global:LockoutFixture.Events[$script:dcA] += @(New-TestEvent 2 $script:dcA)
+        $global:LockoutFixture.Latest[$script:dcA] = [long]2
+        $global:LockoutFixture.FailedQuery = $script:dcA
+        { Invoke-LockoutMonitor -Config $script:config } | Should -Throw '*Simulated RPC loss mid-query*'
+        (Get-TestCursor $script:root $script:dcA).Cursor | Should -Be 1
+        $global:LockoutFixture.FailedQuery = ''
+        Invoke-LockoutMonitor -Config $script:config
+        (Get-TestCursor $script:root $script:dcA).Cursor | Should -Be 2
+        @(Get-TestRows $script:root $script:dcA).Count | Should -Be 2
+    }
 
     It 'restarts from persisted cursor without duplicating events' {
         $global:LockoutFixture.Events[$script:dcA] = @(New-TestEvent 1 $script:dcA)
