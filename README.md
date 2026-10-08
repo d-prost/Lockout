@@ -2,13 +2,14 @@
 
 A lightweight, read-only Active Directory account lockout monitor and investigator for **Windows PowerShell 5.1**. No database, web server, cloud subscription, PowerShell 7, or AD writes.
 
-**Production-oriented v1.0.0.** Windows CI with synthetic events and storage benchmarks is available. Live Windows Server, DC Security Log, Scheduled Task and SMTP integration have **not** been verified in a real customer environment. Deployers must authorize and assess their own environment; a release is not a security certification.
+**Production-oriented v1.0.x.** Windows CI with synthetic events and storage benchmarks is available. Live Windows Server, DC Security Log, Scheduled Task and SMTP integration have **not** been verified in a real customer environment. Deployers must authorize and assess their own environment; a release is not a security certification.
 
 ## Scope
 
 - Monitor Security Event ID **4740** on multiple explicitly named Domain Controllers
 - One checkpoint per DC, bounded event-record windows and per-run workload caps
 - Immutable JSONL segments plus regenerable human-readable log projections
+- Read-only cross-DC history command; no duplicated combined log files
 - Crash-safe journal-before-checkpoint ordering and recovery from interrupted state writes
 - Explicit detection of source log rollback and known retention gaps
 - Local date-based retention (30 days by default), preserving segments with pending eligible emails
@@ -31,11 +32,11 @@ Preview, no changes:
 
     .\Install-LockoutMonitor.ps1 -RunAs 'EXAMPLE\svc-lockout'
 
-Apply in elevated Windows PowerShell 5.1:
+One-command first install in elevated Windows PowerShell 5.1 (replace both DCs and the service identity):
 
-    .\Install-LockoutMonitor.ps1 -RunAs 'EXAMPLE\svc-lockout' -Apply
+    .\Install-LockoutMonitor.ps1 -RunAs 'DOMAIN\svc-lockout' -DomainControllers dc01.corp.example,dc02.corp.example -Apply
 
-The first application creates a private configuration file in C:\ProgramData\LockoutMonitor\config.psd1 and stops until placeholder DC names are replaced. Edit it, then rerun. The installer copies code into fingerprinted immutable directories under Program Files; existing private config and journal are not overwritten. Replacing a different Scheduled Task requires explicit -UpdateTask and saves its former XML definition. An unchanged second run is a no-op.
+The installer initializes C:\ProgramData\LockoutMonitor\config.psd1 only when it does not exist. If -DomainControllers is omitted on a fresh installation, edit the generated placeholders and rerun. If an existing private config differs from requested DCs, installation stops instead of silently overwriting it. The installer copies code into fingerprinted immutable directories under Program Files; existing private config and journal are not overwritten. Replacing a different Scheduled Task requires explicit -UpdateTask and saves its former XML definition. An unchanged second run is a no-op.
 
 ## Configuration
 
@@ -68,6 +69,15 @@ Data layout:
 
 The file-based exclusive writer lock applies across local Windows sessions. It does not coordinate separate servers.
 
+## Read the latest events across all DCs
+
+Run a single read-only command to see recent collected lockouts without creating another combined LOG file:
+
+    .\Get-LockoutEvents.ps1 -Last 50
+    .\Get-LockoutEvents.ps1 -Account 'EXAMPLE\alice' -Last 20
+
+The history viewer reads the retained JSONL files, orders events by TimeUtc and does not modify the journal, checkpoints or mail state. On large stores, an on-demand full history scan can take longer than a scheduled monitoring pass. It does not attempt to attribute a root cause.
+
 ## Investigation
 
     .\Investigate-Lockout.ps1 -Account 'EXAMPLE\alice' -DomainControllers dc01.example.org,dc02.example.org -Minutes 15
@@ -95,6 +105,7 @@ Investigation matches an account name within a bounded time window. It does not 
 - [Installation](docs/INSTALLATION.md)
 - [Troubleshooting and recovery](docs/TROUBLESHOOTING.md)
 - [Tests and 10k/100k benchmarks](docs/TESTING.md)
+- [Quality and simplification release](CHANGELOG.md)
 - [Security policy](SECURITY.md)
 - [Engineering review](docs/ENGINEERING_REVIEW.md)
 - [Microsoft Get-WinEvent](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.diagnostics/get-winevent?view=powershell-5.1)

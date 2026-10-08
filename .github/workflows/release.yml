@@ -1,4 +1,4 @@
-name: Publish production-oriented v1.0.0
+name: Publish production-oriented v1.0.1
 on:
   push:
     branches: [main]
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: initial-release-v1-0-0
+  group: initial-release-v1-0-1
   cancel-in-progress: false
 jobs:
   release:
@@ -18,13 +18,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release v1.0.0 already exists; no changes."
+          if gh release view v1.0.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v1.0.1 already exists; no changes."
             exit 0
           fi
-          gh release create v1.0.0 --repo "$GITHUB_REPOSITORY" \
+          gh release create v1.0.1 --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "AD Account Lockout Monitor & Investigator v1.0.0" \
-            --notes-file docs/RELEASE_NOTES_v1.0.0.md \
+            --title "AD Account Lockout Monitor & Investigator v1.0.1" \
+            --notes-file docs/RELEASE_NOTES_v1.0.1.md \
             --latest
-          gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" --json url,tagName
+          gh release view v1.0.1 --repo "$GITHUB_REPOSITORY" --json url,tagName

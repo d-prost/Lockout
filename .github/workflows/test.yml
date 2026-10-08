@@ -22,7 +22,12 @@ jobs:
           Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 | ForEach-Object {
             $tokens = $null; $errors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors)
-            if ($errors) { $failed = $true; $errors | Out-String | Write-Error }
+            if ($errors) {
+              $failed = $true
+              foreach ($parserError in $errors) {
+                Write-Host ('PARSER_ERROR {0}:{1}:{2} {3}' -f $_.FullName,$parserError.Extent.StartLineNumber,$parserError.Extent.StartColumnNumber,$parserError.Message)
+              }
+            }
           }
           if ($failed) { exit 1 }
       - name: Independent static rules with PSScriptAnalyzer

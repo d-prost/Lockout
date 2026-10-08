@@ -35,6 +35,22 @@ Recovery must be approved and documented:
 
 This project intentionally does not provide a destructive auto-reset command.
 
+## Journal integrity errors during cursor recovery
+
+If the monitor reports a malformed latest JSONL segment, a source mismatch, or overlapping RecordId ranges, it intentionally does not advance that DC checkpoint. The filename alone is no longer treated as sufficient proof of a completed segment.
+
+1. Disable the Scheduled Task and preserve the entire DataDirectory, including state, journal, outbox, and heartbeat, in an approved secured location.
+2. Compare the indicated journal file with a trusted backup. Check the first/last RecordId and Domain Controller identity; note any overlap with other collection dates.
+3. Do not rename files, delete cursor.json/state files or fast-forward RecordIds to suppress a corruption warning.
+4. Have an operator determine whether a complete source event interval can be re-collected. Restore or migrate under documented change control and verify no pending mail records are lost.
+5. Resume the task and confirm healthy checkpoint progression and no duplicate journal ranges.
+
+A valid tail check does not cryptographically attest every historical record; stronger forensic integrity or tamper detection must be supplied by an approved external log system if required.
+
+## Scheduled Task security drift
+
+The installer refuses to consider a task unchanged when privileges, LogonType, trigger/action count, execution settings or non-overlap policy differ. Before using -UpdateTask, review the exported XML and the affected service account; do not blindly overwrite a task that an administrator or attacker modified.
+
 ## SMTP errors or repeated mail
 
 SMTP failures leave the corresponding segment outbox offset pending for a later run. A crash after successful send but before offset persistence may yield a duplicate email. Review relay TLS mode, credentials, recipient restrictions, alert eligibility and cooldown. Check SMTP delivery reports before resetting an outbox.

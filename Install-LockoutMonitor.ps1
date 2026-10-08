@@ -14,6 +14,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9 _.-]{1,100}$')][string]$TaskName = 'AD-LockoutMonitor',
     [ValidateSet(1,2,5,10,15,30,60)][int]$IntervalMinutes = 5,
     [string]$RunAs = '',
+    [string[]]$DomainControllers,
     [pscredential]$Credential,
     [switch]$Apply,
     [switch]$UpdateTask
@@ -42,12 +43,24 @@ $executable = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powersh
     Task = $TaskName
     RunAs = $RunAs
     IntervalMinutes = $IntervalMinutes
+    DomainControllers = @($DomainControllers)
 }
 if (-not $Apply) {
     Write-Host 'PREVIEW only. Specify -Apply and -RunAs to install.'
     return
 }
 if (-not $RunAs) { throw '-RunAs required for -Apply.' }
+# Nur explizite, eindeutige DC-Namen werden in neue Konfigurationen geschrieben.
+if ($DomainControllers -and $DomainControllers.Count -gt 0) {
+    $seenDc = @{}
+    foreach ($dc in @($DomainControllers)) {
+        if ([string]::IsNullOrWhiteSpace($dc) -or $dc -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,252}$' -or $dc -match '\.example\.(com|org|test)$') {
+            throw "Invalid Domain Controller: $dc"
+        }
+        if ($seenDc.ContainsKey($dc.ToLowerInvariant())) { throw "Duplicate Domain Controller: $dc" }
+        $seenDc[$dc.ToLowerInvariant()] = $true
+    }
+}
 # Program Files ist standardmaessig gegen Veraenderung durch normale Benutzer geschuetzt.
 $programFiles = [IO.Path]::GetFullPath([string]$env:ProgramFiles).TrimEnd('\')
 if (-not $InstallRoot.StartsWith(($programFiles + '\'),[StringComparison]::OrdinalIgnoreCase)) {
@@ -61,7 +74,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $accountSid = ([Security.Principal.NTAccount]::new($RunAs)).Translate([Security.Principal.SecurityIdentifier])
 
 $files = @(
-    'LockoutMonitor.ps1','Investigate-Lockout.ps1',
+    'LockoutMonitor.ps1','Investigate-Lockout.ps1','Get-LockoutEvents.ps1',
     'src\Lockout.Core.psm1','src\Lockout.Runner.psm1','src\Lockout.Storage.psm1'
 )
 [void][IO.Directory]::CreateDirectory((Join-Path $InstallRoot 'releases'))
@@ -115,10 +128,24 @@ if ($newDirectory) {
 if (-not [IO.File]::Exists($configPath)) {
     $template = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'config\config.example.psd1') -Raw -Encoding UTF8
     $template = $template.Replace('C:\ProgramData\LockoutMonitor', $DataDirectory.Replace("'","''"))
+    if ($DomainControllers -and $DomainControllers.Count -gt 0) {
+        $placeholder = "'dc01.example.org', 'dc02.example.org'"
+        if (-not $template.Contains($placeholder)) { throw 'Cannot locate domain controller placeholders in template.' }
+        $names = (@($DomainControllers | ForEach-Object { "'" + $_ + "'" }) -join ', ')
+        $template = $template.Replace($placeholder, $names)
+    }
     [IO.File]::WriteAllText($configPath,$template,(New-Object Text.UTF8Encoding($false)))
     Write-Warning 'Configuration created. Replace the example DCs before continuing.'
 }
 $config = Import-PowerShellDataFile -LiteralPath $configPath
+if ($DomainControllers -and $DomainControllers.Count -gt 0) {
+    # Eine bestehende private Konfiguration wird nicht unbemerkt veraendert.
+    $existingNames = @($config.DomainControllers | ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object)
+    $requestedNames = @($DomainControllers | ForEach-Object { ([string]$_).ToLowerInvariant() } | Sort-Object)
+    if (($existingNames -join '|') -cne ($requestedNames -join '|')) {
+        throw 'DomainControllers differ from private config; edit config.psd1 explicitly (no overwrite).'
+    }
+}
 if (@($config.DomainControllers) -match '\.example\.(com|org|test)$') {
     throw 'Example Domain Controllers remain in config.psd1. Edit the file and run the installer again.'
 }
