@@ -36,6 +36,12 @@ Describe 'Simple read-only cross-DC history viewer' {
         (Test-Path -LiteralPath (Join-Path $script:root 'state')) | Should -BeFalse
         (Test-Path -LiteralPath (Join-Path $script:root 'writer.lock')) | Should -BeFalse
     }
+    It 'accepts a qualified search label without falsely assuming a verified target domain' {
+        $result = @(& $script:viewer -DataDirectory $script:root -Account 'EXAMPLE\alice' -Last 10)
+        $result.Count | Should -Be 2
+        # Die Domain-Zuordnung wird nicht ueberprueft; es ist ein Namensfilter.
+    }
+
     It 'filters by UTC timestamp without deleting old journal segments' {
         $result = @(& $script:viewer -DataDirectory $script:root -Last 50 -Since ([datetime]'2026-10-08T09:01:30Z'))
         $result.Count | Should -Be 1
