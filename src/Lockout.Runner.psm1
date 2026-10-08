@@ -119,7 +119,11 @@ function Invoke-PendingMail {
             for ($i=$offset; $i -lt $rows.Count; $i++) {
                 $item = $rows[$i]
                 if ([bool]$item.AlertEligible) {
-                    $account = ([string]$item.Account).ToLowerInvariant()
+                    # Bei gleichnamigen Konten in verschiedenen Domaenen verhindert die SID
+                    # eine unbeabsichtigte gemeinsame Cooldown-Sperre.
+                    $accountIdentity = [string]$item.TargetSid
+                    if ([string]::IsNullOrWhiteSpace($accountIdentity)) { $accountIdentity = [string]$item.Account }
+                    $account = $accountIdentity.ToLowerInvariant()
                     $skip = $false
                     if ($last.ContainsKey($account)) {
                         $previous = [datetime]::Parse($last[$account],[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind)
