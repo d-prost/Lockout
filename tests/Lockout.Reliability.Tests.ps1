@@ -18,6 +18,15 @@ BeforeAll {
         return $record
     }
 
+    function New-TestRecord {
+        param([long]$RecordId,[string]$DomainController,[bool]$AlertEligible=$false)
+        return [pscustomobject][ordered]@{
+            Key='test';DomainController=$DomainController;RecordId=$RecordId;EventId=4740
+            TimeUtc=[datetime]::UtcNow.ToString('o');Account='EXAMPLE\testuser'
+            CallerComputer='WS-TEST';AlertEligible=$AlertEligible;RootCause='Undetermined'
+        }
+    }
+
     function Get-TestRows {
         param([string]$Root, [string]$DomainController)
         $key = Get-SourceKey -Name $DomainController
@@ -190,13 +199,13 @@ Describe 'Journal retention protects pending alerts' {
         $script:dc = 'dc01.example.test'
     }
     It 'deletes old non-alert journal and text projection' {
-        $record = ConvertTo-Record -Event (New-TestEvent 7 $script:dc) -DomainController $script:dc
+        $record = New-TestRecord -RecordId 7 -DomainController $script:dc
         $path = Write-JournalSegment -DataDirectory $script:root -DomainController $script:dc -Records @($record) -CollectedUtc ([datetime]::UtcNow.AddDays(-60))
         (Invoke-JournalRetention -DataDirectory $script:root -RetentionDays 30).Removed | Should -Be 1
         (Test-Path -LiteralPath $path) | Should -BeFalse
     }
     It 'keeps old events while SMTP acknowledgement is missing' {
-        $record = ConvertTo-Record -Event (New-TestEvent 7 $script:dc) -DomainController $script:dc -AlertEligible $true
+        $record = New-TestRecord -RecordId 7 -DomainController $script:dc -AlertEligible $true
         $path = Write-JournalSegment -DataDirectory $script:root -DomainController $script:dc -Records @($record) -CollectedUtc ([datetime]::UtcNow.AddDays(-60))
         $r = Invoke-JournalRetention -DataDirectory $script:root -RetentionDays 30
         $r.Blocked | Should -Be 1
