@@ -16,20 +16,20 @@ BeforeAll {
 }
 Describe 'Investigator tolerates malformed entries and uses native 4740 caller evidence' {
     It 'continues after malformed 4740 XML and returns later valid evidence' {
-        $script:bad = New-InvestigationFixture -EventId 4740 -RecordId 11 -Payload '<Event><EventData><Data'
-        $script:valid = New-InvestigationFixture -EventId 4740 -RecordId 12 -Payload (
+        $global:badInvestigationFixture = New-InvestigationFixture -EventId 4740 -RecordId 11 -Payload '<Event><EventData><Data'
+        $global:validInvestigationFixture = New-InvestigationFixture -EventId 4740 -RecordId 12 -Payload (
             '<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"><EventData>' +
             '<Data Name="TargetUserName">labuser</Data><Data Name="TargetDomainName">WIN11-LAB</Data>' +
             '<Data Name="TargetSid">S-1-5-21-1-2-3-1001</Data><Data Name="SubjectDomainName">LAB</Data>' +
             '</EventData></Event>'
         )
-        $script:krb = New-InvestigationFixture -EventId 4771 -RecordId 13 -Payload (
+        $global:krbInvestigationFixture = New-InvestigationFixture -EventId 4771 -RecordId 13 -Payload (
             '<Event><EventData><Data Name="TargetUserName">labuser</Data>' +
             '<Data Name="IpAddress">192.0.2.17</Data></EventData></Event>'
         )
         Mock -CommandName Get-WinEvent -MockWith {
-            if ($FilterHashtable.Id -eq 4740) { return @($script:bad,$script:valid) }
-            if ($FilterHashtable.Id -eq 4771) { return @($script:krb) }
+            if ($FilterHashtable.Id -eq 4740) { return @($global:badInvestigationFixture,$global:validInvestigationFixture) }
+            if ($FilterHashtable.Id -eq 4771) { return @($global:krbInvestigationFixture) }
             return @()
         }
         $warnings = @()
