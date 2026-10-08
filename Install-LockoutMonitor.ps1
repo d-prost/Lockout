@@ -48,6 +48,11 @@ if (-not $Apply) {
     return
 }
 if (-not $RunAs) { throw '-RunAs required for -Apply.' }
+# Program Files ist standardmaessig gegen Veraenderung durch normale Benutzer geschuetzt.
+$programFiles = [IO.Path]::GetFullPath([string]$env:ProgramFiles).TrimEnd('\')
+if (-not $InstallRoot.StartsWith(($programFiles + '\'),[StringComparison]::OrdinalIgnoreCase)) {
+    throw 'For -Apply, InstallRoot must be under Program Files to protect scheduled code from user modification.'
+}
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]::new($currentIdentity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
