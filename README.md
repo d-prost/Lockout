@@ -18,7 +18,7 @@ A lightweight, read-only Active Directory account lockout monitor and investigat
 - No external runtime modules, SQL database, SIEM or cloud services
 - Repeatable installation with dry-run, immutable code releases and protected private configuration
 
-**Root-cause policy:** a 4740 CallerComputerName is a reported observation, not a proven origin. Likewise, a 4625/4771/4776 workstation name or IP is evidence only. Results explicitly keep RootCause = Undetermined.
+**Root-cause policy:** the native Windows 4740 XML exposes the reported caller in `TargetDomainName` (a separate `CallerComputerName` may appear in normalized input). That field is **not** a trusted account-domain name, and it does not prove the root cause or IP. The stored `Account` is deliberately unqualified; `TargetSid` remains available for identification and SMTP cooldown. The 4625/4771/4776 workstation/IP values are observations only. `RootCause` stays `Undetermined`.
 
 ## Requirements
 
@@ -84,12 +84,18 @@ The history viewer reads the retained JSONL files, orders events by TimeUtc and 
 
 | Event | Field | Evidence only |
 | --- | --- | --- |
-| 4740 | CallerComputerName | Lockout's reported caller |
+| 4740 | TargetDomainName in native XML, or explicit CallerComputerName in normalized sources | Reported caller only; not the locked account's domain |
 | 4625 | IpAddress, WorkstationName | Failed logon observation |
 | 4771 | IpAddress | Kerberos client address in event |
 | 4776 | Workstation | NTLM reported source workstation |
 
-Investigation matches an account name within a bounded time window. It does not establish SID-level correlation or a confirmed root cause.
+Investigation matches an account name within a bounded time window. It does not establish SID-level correlation or a confirmed root cause. An individual malformed event is skipped with a warning rather than aborting all investigation results. Qualifying -Account with a domain does not authenticate that domain against a native 4740 record.
+
+## Proxmox / Windows Server live lab
+
+A **Windows Server VM is not automatically a Domain Controller**. To test real 4740 collection, use an isolated lab DC with AD DS and a domain-joined Windows 11 VM. Consult [the lab integration guide](verification/PROXMOX_AD_LAB.md) and run the read-only, privacy-safe [4740 field verifier](verification/Test-Lab4740.ps1) after inducing a lockout manually for a disposable lab-only account.
+
+The previous v1.0.1 journal is intentionally immutable. Previously recorded WORKSTATION\USER labels may be misleading and are **not automatically rewritten**. A native 4740 account identifier is intentionally not domain-qualified without separate evidence; use TargetSid for unique identity where available.
 
 ## Guarantees and limits
 
