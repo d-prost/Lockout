@@ -28,9 +28,10 @@ $collected = New-Object 'System.Collections.Generic.List[object]'
 foreach ($file in @(Get-ChildItem -LiteralPath $journal -Filter '*.jsonl' -File -Recurse)) {
     foreach ($record in @(Read-JournalSegment -Path $file.FullName)) {
         if ($Account) {
-            $actual = [string]$record.Account
-            $wanted = [string]$Account
-            $candidate = if ($wanted.Contains('\')) { $actual } else { ($actual -split '\\')[-1] }
+            # 4740 liefert keinen belastbaren Ziel-Domainnamen. Qualifizierte
+            # Benutzerfilter duerfen deshalb kein falsches Domain-Matching vortaeuschen.
+            $wanted = ([string]$Account -split '\\')[-1]
+            $candidate = ([string]$record.Account -split '\\')[-1]
             if (-not [string]::Equals($candidate,$wanted,[StringComparison]::OrdinalIgnoreCase)) { continue }
         }
         if ($PSBoundParameters.ContainsKey('Since')) {
