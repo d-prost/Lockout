@@ -1,0 +1,31 @@
+name: Windows PowerShell 5.1 tests
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell 5.1 scripts
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors)
+            if ($errors) { $failed = $true; $errors | Out-String | Write-Error }
+          }
+          if ($failed) { exit 1 }
+      - name: Run Pester 5 unit tests
+        shell: powershell
+        run: |
+          Install-Module -Name Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          Import-Module Pester -RequiredVersion 5.7.1
+          $r = Invoke-Pester -Path .\tests -PassThru
+          if ($r.FailedCount -gt 0 -or $r.PassedCount -eq 0) { exit 1 }
