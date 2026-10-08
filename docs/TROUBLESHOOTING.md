@@ -72,3 +72,11 @@ Do not edit event JSONL or cursor JSON by hand while the Scheduled Task runs. Di
 - Confirm source release files are protected against non-admin writes.
 - Check Task Scheduler last result and local/event log access under the **task identity**, not just an administrator's interactive shell.
 - Verify execution policy and script signing requirements; do not disable enterprise protections as a default workaround.
+
+## 4740 has a caller but Account looks like WORKSTATION\USER
+
+Older v1.0.1 records may incorrectly concatenate the native TargetDomainName field (a reported workstation) with TargetUserName. This patch preserves old canonical JSONL without rewriting historical evidence. New native 4740 events keep Account = TargetUserName, CallerComputer = TargetDomainName, and the TargetSid when supplied.
+
+A blank CallerComputer is a valid observation, not proof of missing logging or a particular root cause. The investigator warns and skips malformed individual XML events. The continuous monitor deliberately fails closed on malformed source entries; repeated poison events require a separately reviewed operator recovery design.
+
+Use the isolated lab verification script to check real field mapping. Do not publish unsanitized Security XML from company Domain Controllers.

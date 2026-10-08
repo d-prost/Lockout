@@ -3,13 +3,33 @@ Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'Lockout.Storage.psm1') -Force
 
 function Get-Fields {
-    param($Event)
+    param([Parameter(Mandatory)]$Event)
     [xml]$xml = $Event.ToXml()
     $fields = @{}
-    foreach ($node in @($xml.Event.EventData.Data)) {
-        if ($null -ne $node -and $node.Name) { $fields[[string]$node.Name] = [string]$node.'#text' }
+    # InnerText ist auch fuer leere EventData-Werte unter StrictMode sicher.
+    # XML-Namespace-unabhaengige Auswahl; Feldnamen nicht als Positionen interpretieren.
+    foreach ($node in @($xml.SelectNodes('//*[local-name()="EventData"]/*[local-name()="Data"]'))) {
+        if ($null -ne $node -and $null -ne $node.Attributes['Name']) {
+            $fields[[string]$node.Attributes['Name'].Value] = [string]$node.InnerText
+        }
     }
     return $fields
+}
+
+function Get-4740CallerEvidence {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Fields)
+    # Originales Windows-4740-XML: "Caller Computer Name" steckt in TargetDomainName.
+    # Manche normalisierten Quellen enthalten zusaetzlich CallerComputerName.
+    $explicit = [string]$Fields['CallerComputerName']
+    if (-not [string]::IsNullOrWhiteSpace($explicit)) {
+        return [pscustomobject]@{ Computer = $explicit; Field = 'CallerComputerName' }
+    }
+    $native = [string]$Fields['TargetDomainName']
+    if (-not [string]::IsNullOrWhiteSpace($native)) {
+        return [pscustomobject]@{ Computer = $native; Field = 'TargetDomainName' }
+    }
+    return [pscustomobject]@{ Computer = ''; Field = 'NotAvailable' }
 }
 
 function ConvertTo-Record {
@@ -19,15 +39,20 @@ function ConvertTo-Record {
     if (-not $dc) { $dc = [string]$Event.MachineName }
     $rid = [long]$Event.RecordId
     if ($rid -lt 1 -or -not $dc) { throw 'Invalid event identity.' }
-    if (-not $data['TargetUserName']) { throw 'Missing target account.' }
+    if ([string]::IsNullOrWhiteSpace([string]$data['TargetUserName'])) { throw 'Missing target account.' }
     $key = Get-SourceKey ($dc + '|' + $rid)
+    $caller = Get-4740CallerEvidence -Fields $data
     return [ordered]@{
         Key = $key; DomainController = $dc; RecordId = $rid; EventId = 4740
         TimeUtc = $Event.TimeCreated.ToUniversalTime().ToString('o')
-        Account = (([string]$data['TargetDomainName']) + '\' + ([string]$data['TargetUserName']))
+        # Ein 4740-TargetDomainName ist kein verlaesslicher Kontodomainname.
+        # Zur Zuordnung TargetSid verwenden; Kontoname bleibt bewusst unqualifiziert.
+        Account = [string]$data['TargetUserName']
         TargetSid = [string]$data['TargetSid']
-        CallerComputer = [string]$data['CallerComputerName']
-        CallerEvidence = 'Event4740CallerComputerName'
+        CallerComputer = [string]$caller.Computer
+        CallerEvidence = ('Event4740' + [string]$caller.Field)
+        SubjectDomainName = [string]$data['SubjectDomainName']
+        RawTargetDomainName = [string]$data['TargetDomainName']
         SourceIp = $null; RootCause = 'Undetermined'; AlertEligible = $AlertEligible
     }
 }
@@ -62,4 +87,4 @@ function Send-Alert {
     }
 }
 
-Export-ModuleMember -Function Get-Fields,ConvertTo-Record,Send-Alert
+Export-ModuleMember -Function Get-Fields,Get-4740CallerEvidence,ConvertTo-Record,Send-Alert

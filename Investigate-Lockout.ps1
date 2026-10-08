@@ -23,7 +23,13 @@ foreach ($dc in $DomainControllers) {
             continue
         }
         foreach ($event in $events) {
-            $f = Get-Fields $event
+            try {
+                $f = Get-Fields -Event $event
+            } catch {
+                # Ein unlesbares Ereignis darf die gesamte Investigation nicht beenden.
+                Write-Warning ("Cannot parse event {0} record {1} on {2}: {3}" -f $id,$event.RecordId,$dc,$_.Exception.Message)
+                continue
+            }
             $user = switch ($id) {
                 4740 { [string]$f['TargetUserName'] }
                 4625 { [string]$f['TargetUserName'] }
@@ -34,7 +40,7 @@ foreach ($dc in $DomainControllers) {
             if (-not [string]::Equals($short,$user,[StringComparison]::OrdinalIgnoreCase)) { continue }
             $ip = $null; $hostName = $null; $role = 'UnverifiedObservation'
             switch ($id) {
-                4740 { $hostName = [string]$f['CallerComputerName']; $role = 'LockoutCallerField' }
+                4740 { $caller = Get-4740CallerEvidence -Fields $f; $hostName = [string]$caller.Computer; $role = ('LockoutCallerField:' + [string]$caller.Field) }
                 4625 { $ip = [string]$f['IpAddress']; $hostName = [string]$f['WorkstationName']; $role = 'FailedLogonObservation' }
                 4771 { $ip = [string]$f['IpAddress']; $role = 'KerberosClientAddress' }
                 4776 { $hostName = [string]$f['Workstation']; $role = 'NtlmSourceWorkstation' }
