@@ -1,55 +1,78 @@
-# Engineering review — 2026-10-08
+# Engineering Review (2026-10-08)
 
-## Scope
-Baseline: user-supplied LockoutMonitor.ps1 archive. Target: Windows PowerShell 5.1, domain-joined Windows management host, built-in Security Event Logs, no DB/cloud, no AD writes. This review is source-level; it is not a Windows/AD integration certification.
+## Provenance and scope
 
-## Audit findings
+The original user-provided ZIP contained a single-host PowerShell lockout monitor. This review is a source-level evaluation; no production Active Directory, DC Security event logs or SMTP credentials were available to this repository authoring session. Windows Server integration behavior is **not** certified. No external project code was copied.
 
-| Priority | Original behavior | Impact | Candidate treatment |
+## Original critical and high-risk findings
+
+| Severity | Prior problem | Impact | Revised solution |
 | --- | --- | --- | --- |
-| CRITICAL | Single local DC | Incomplete domain coverage | Explicit configured multi-DC polling |
-| CRITICAL | 30-minute lookback | Event loss after longer downtime | Separate per-DC RecordID cursor; retain DC logs and monitor liveness |
-| CRITICAL | SMTP errors only in log | No automatic alert retry | Persist per-event outgoing status and retry |
-| HIGH | One RecordID per process | Not valid across DCs | Per-source cursor |
-| HIGH | Text/JSONL before cursor update | Crash could duplicate exported rows | Canonical event store; regenerate projections |
-| HIGH | No log continuity guard | Silent retention gaps | Compare oldest/latest source RecordIDs; error on discontinuity |
-| HIGH | Infinite growing output | Storage exhaustion | Explicit release limitation; archive/retention procedure required |
-| HIGH | Script contains config | Unsafe editing and secret exposure | Private PSD1 config; ignore private config |
-| HIGH | Notification source ambiguous | False blame of users/devices | Separate observed caller/source IP/root-cause fields |
-| RECOMMENDED | No tests or CI | Regression risks | Synthetic Pester and Windows PS 5.1 CI |
-| RECOMMENDED | No self-monitoring | Silent failure | Heartbeat and nonzero error exit |
-| OPTIONAL | Automatic correlation | False attribution/performance risks | Bounded on-demand investigation instead |
+| CRITICAL | Local DC only | Missed lockouts on other DCs | Explicit multi-DC polling and per-source state |
+| CRITICAL | Fixed small lookback | Gaps after scheduler outages | RecordId-bounded continuation |
+| CRITICAL | Failed SMTP not queued | Missed notifications | Per-segment outbox offsets with retry |
+| HIGH | One global RecordId | Invalid across DCs | Checkpoint per source |
+| HIGH | Nontransactional text/JSON state | Duplicates or missing rows | Immutable journal before cursor, regenerable text logs |
+| HIGH | No log lifecycle checks | Silent log-wrap data loss | Fail on known retention gaps/record rollback |
+| HIGH | Unbounded log accumulation | Storage exhaustion | Size-rotated JSONL, date-based retention |
+| HIGH | Config embedded in code | Unsafe updates | Private PSD1 outside installed code |
+| HIGH | Caller computer treated as cause | Unreliable attribution | Observed caller, source evidence, undetermined root cause |
+| HIGH | Concurrency uncertain across sessions | Concurrent state updates | Exclusive local NTFS writer.lock handle |
+| RECOMMENDED | No test suite | Undetected regressions | Pester, AST parsing, PSScriptAnalyzer, synthetic benchmarks |
+| OPTIONAL | Automatic causal correlation | False positives and complexity | Bounded, on-demand read-only investigator |
 
-## Reliability model
+## Current architecture
 
-1. Read one DC at a time, track its cursor.
-2. Write canonical event JSON under deterministic DC+RecordId key.
-3. Update cursor after durable event creation.
-4. Rebuild log projections from event store.
-5. Attempt mail; write sent state only after send succeeds.
-6. Report source and SMTP errors and update heartbeat.
+1. Installer puts hash-verified executable files under protected Program Files, private config and state under ProgramData.
+2. Scheduled Task runs every five minutes using a dedicated non-admin identity.
+3. Runner opens writer.lock exclusively for the duration of work.
+4. For each DC, load and validate checkpoint; scan journal range; attempt crash recovery from already committed segments.
+5. Read Security log bounds and query at most MaxWindowsPerRun windows, each at most RecordWindowSize source RecordIds.
+6. Convert 4740 XML by named fields; append immutable JSONL segment; write text projection; only then commit cursor.
+7. Process alert-eligible journal segments through persistent offset and cooldown state. Failed sends are retried. Completed segments are skipped.
+8. Expire historical journal segments according to collection date, unless email remains pending.
+9. Update heartbeat with OK/BACKLOG/ERROR and details. Any detected stage failure exits nonzero.
 
-**Honest guarantee:** durable local events use idempotent keys under a single writer, not end-to-end exactly-once semantics. Security events deleted by DC retention are unrecoverable. SMTP may deliver twice after a crash.
+Journal data is deliberately simple local files; no SQL database or cloud dependency.
 
-## Competitor comparison
+## Test evidence
 
-| Project | Scope | Stack | License status | Differentiator here |
-| --- | --- | --- | --- | --- |
-| Brets0150/AD-PowerAdmin | Broad AD cybersecurity auditing, breach checks and ACL analysis | PowerShell | No root LICENSE verified | Smaller dedicated lockout tool |
-| wgerade/direnix | Daily AD identity operational insights | C#/.NET | MIT verified | No application server/DB required here |
-| Microsoft Account Lockout and Management Tools | Diagnostic utilities (LockoutStatus, etc.) | Windows utilities | Microsoft distribution terms | Scheduled open-source event evidence spool |
-| Account_Lockout.ps1 | Multiple unrelated scripts share this name | Varies | Not verifiable by filename | No unsourced feature claims |
+- Synthetic Pester suite: restart, duplicate records, failed remote source, cursor replay, committed journal recovery, SMTP retry, retention, no-overlap and task definition.
+- Windows Server 2022 runner benchmark at 500 records/segment: 10,000 events 2.215s; 100,000 events 21.139s for synthetic ingestion. Retention 1.096s and 10.636s respectively.
+- Evidence: https://github.com/d-prost/Lockout/actions/runs/37752814361
+- Current branch also runs PSScriptAnalyzer 1.25.0; see final HEAD Actions status for results.
 
-Source pointers: https://github.com/Brets0150/AD-PowerAdmin , https://github.com/wgerade/direnix , https://www.microsoft.com/en-us/download/details.aspx?id=18465 . These are comparisons of declared scope, not formal vulnerability or maintenance audits. No external code has been copied.
+These are synthetic tests only. No claim of live DC query validation, SMTP live delivery or real Scheduled Task registration.
 
-## Explicit release blockers
+## Residual risks
 
-1. CI pass on the final head commit.
-2. Windows Server integration tests on at least two reachable DCs with real or lab 4740 events.
-3. Validate account-read permissions, event log wrap/clear, network interruption, Task Scheduler non-overlap and SMTP retry.
-4. Retention/archive procedure, alert for stale heartbeat, review of personal-data handling and NTFS ACL.
-5. Validate expected throughput; current projections rebuild from all canonical events on each run and are unsuitable for unbounded history.
+| Priority | Residual risk | Treatment |
+| --- | --- | --- |
+| HIGH | DC Security events rolled off before query | Detected gaps fail closed; missing data cannot be recovered |
+| HIGH | Security log clears/reuses IDs faster than polling | Cannot guarantee detection; external audit and incident process required |
+| HIGH | SMTP exactly-once delivery not feasible | At-least-once with documented duplicate window |
+| HIGH | Large pending email backlog may extend retention | Heartbeat error, operator action and disk alert required |
+| HIGH | Local code or state compromised by privileged attacker | Least-privilege ACL, signed deployment, infrastructure audit |
+| RECOMMENDED | Live DC, RPC, Event Log ACL, XML Task registration untested | Deployment owner verification |
+| RECOMMENDED | Independent human code review not yet documented | Obtain reviewer approval independently of authoring assistant |
+| OPTIONAL | Advanced multi-domain identity correlation | Deferred; explicit evidence-only investigator |
+
+## Release decision
+
+The maintainer explicitly requested a **production-oriented release without making live Windows Server integration testing or successful CI mandatory hard gates**. This waiver concerns publication policy only; it is not a proof of safety or a claim of having performed those tests. Independent static-analysis rules are automated and should not be misrepresented as an independent human reviewer.
+
+Before relying operationally on alerts, deployers should inspect their own domain permissions, task registration, stale heartbeat, source Security log size and SMTP relay behavior.
+
+## Comparison
+
+| Existing product | Focus | Difference |
+| --- | --- | --- |
+| Brets0150/AD-PowerAdmin | Broad PowerShell AD security audit | This utility focuses narrowly on lockout data durability |
+| wgerade/direnix | Broader C# identity-operations automation | This utility uses Windows PowerShell and local files |
+| Microsoft Account Lockout and Management Tools | Classic troubleshooting utilities | This utility continuously journals new lockouts |
+
+AD-PowerAdmin root LICENSE could not be independently verified; no source is borrowed. Direnix advertises an MIT license. A filename alone such as Account_Lockout.ps1 is too ambiguous for an accurate license and maintenance comparison.
 
 ## Rollback
 
-Disable scheduled task and mail, preserve event files and state for diagnosis, then redeploy previous approved version. No AD policy or user-account changes are performed by this software.
+Disable the task, preserve private data and journal, restore prior Task Scheduler XML if available, and inspect checkpoint and outbox consistency before restarting. No domain policy or account changes are made by this utility.
