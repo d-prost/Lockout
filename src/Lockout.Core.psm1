@@ -65,7 +65,7 @@ function Send-Alert {
         $c = [Net.WebUtility]::HtmlEncode([string]$Record.CallerComputer)
         $d = [Net.WebUtility]::HtmlEncode([string]$Record.DomainController)
         $m.Body = '<html><body><h3>Account lockout</h3><p>Account: ' + $a + '</p><p>Caller computer (unverified): ' + $c + '</p><p>DC: ' + $d + '</p><p>No verified source IP. Root cause undetermined.</p></body></html>'
-        $client = New-Object Net.Mail.SmtpClient([string]$Settings.Server,[int]$Settings.Port)
+        $client = New-Object -TypeName Net.Mail.SmtpClient -ArgumentList @([string]$Settings.Server,[int]$Settings.Port)
         $client.UseDefaultCredentials = $false
         $client.EnableSsl = [bool]$Settings.StartTls
         $client.Timeout = 15000
@@ -93,7 +93,7 @@ function Invoke-LockoutMonitor {
     foreach ($p in @($root,$eventsDir)) {
         if (-not (Test-Path -LiteralPath $p)) { [void](New-Item -Path $p -ItemType Directory -Force) }
     }
-    $mutex = New-Object Threading.Mutex($false,'Local\ADLockoutMonitor')
+    $mutex = New-Object -TypeName Threading.Mutex -ArgumentList @($false,'Local\ADLockoutMonitor')
     $locked = $false
     try {
         try { $locked = $mutex.WaitOne(10000) }
@@ -115,6 +115,10 @@ function Invoke-LockoutMonitor {
                 $newest = Get-WinEvent -ComputerName $dc -LogName Security -MaxEvents 1 -ErrorAction Stop
                 if ($after -gt 0 -and [long]$newest.RecordId -lt $after) { throw 'Security log reset; manual recovery required.' }
                 if ($after -gt 0) {
+                    $oldest = Get-WinEvent -ComputerName $dc -LogName Security -Oldest -MaxEvents 1 -ErrorAction Stop
+                    if ([long]$oldest.RecordId -gt ($after + 1)) { throw 'Security log retention gap; assess lost events before resetting state.' }
+                }
+                if ($after -gt 0) {
                     $xpath = 'Event[System[(EventID=4740) and (EventRecordID > ' + $after + ')]]'
                 } else {
                     $time = [datetime]::UtcNow.AddMinutes(-[int]$Config.InitialLookbackMinutes).ToString('o')
@@ -131,6 +135,7 @@ function Invoke-LockoutMonitor {
                     if (-not (Test-Path -LiteralPath $file)) { Write-JsonAtomic $file $record }
                     $after = [Math]::Max($after,[long]$item.RecordId)
                 }
+                if ($after -eq 0) { $after = [long]$newest.RecordId }
                 $positions[$index] = $after
                 Write-JsonAtomic $statePath ([ordered]@{Version=1;Controllers=$positions})
             } catch { $errors += ($dc + ': ' + $_.Exception.Message) }
