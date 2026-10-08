@@ -1,5 +1,6 @@
 #requires -Version 5.1
 Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'Lockout.Storage.psm1') -Force
 
 function Get-Fields {
     param($Event)
@@ -29,16 +30,14 @@ function Read-Json {
 }
 
 function ConvertTo-Record {
-    param($Event)
+    param($Event,[string]$DomainController,[bool]$AlertEligible=$false)
     $data = Get-Fields $Event
-    $dc = [string]$Event.MachineName
+    $dc = [string]$DomainController
+    if (-not $dc) { $dc = [string]$Event.MachineName }
     $rid = [long]$Event.RecordId
     if ($rid -lt 1 -or -not $dc) { throw 'Invalid event identity.' }
     if (-not $data['TargetUserName']) { throw 'Missing target account.' }
-    $identity = ($dc.ToLowerInvariant() + '|' + $rid)
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try { $key = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($identity)))).Replace('-','').ToLowerInvariant() }
-    finally { $sha.Dispose() }
+    $key = Get-SourceKey ($dc + '|' + $rid)
     return [ordered]@{
         Key = $key; DomainController = $dc; RecordId = $rid; EventId = 4740
         TimeUtc = $Event.TimeCreated.ToUniversalTime().ToString('o')
@@ -46,7 +45,7 @@ function ConvertTo-Record {
         TargetSid = [string]$data['TargetSid']
         CallerComputer = [string]$data['CallerComputerName']
         CallerEvidence = 'Event4740CallerComputerName'
-        SourceIp = $null; RootCause = 'Undetermined'
+        SourceIp = $null; RootCause = 'Undetermined'; AlertEligible = $AlertEligible
     }
 }
 
