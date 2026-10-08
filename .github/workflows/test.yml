@@ -1,9 +1,12 @@
 name: Windows PowerShell 5.1 tests
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
+concurrency:
+  group: lockout-test-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
