@@ -91,6 +91,12 @@ The history viewer reads the retained JSONL files, orders events by TimeUtc and 
 
 Investigation matches an account name within a bounded time window. It does not establish SID-level correlation or a confirmed root cause. An individual malformed event is skipped with a warning rather than aborting all investigation results. Qualifying -Account with a domain does not authenticate that domain against a native 4740 record.
 
+## Lab validation status
+
+**Operator-reported Windows Server 2025 Domain Controller test:** a real Security Event 4740 was successfully parsed by the patch; a second consecutive monitoring run stored no duplicate event. Windows PowerShell 5.1 Pester checks passed 44/44 both in the operator report and independently on [GitHub Actions #37838548231](https://github.com/d-prost/Lockout/actions/runs/37838548231).
+
+The lab lockout originated **on the DC itself**, so independent Windows 11 caller attribution, 4776/4771 account correlation, multi-DC retrieval, SMTP and actual least-privilege task registration are not yet established. See [sanitized lab acceptance report](verification/LAB_ACCEPTANCE.md) and [open 4776 investigation](https://github.com/d-prost/Lockout/issues/4). This is a verified single-DC scenario, not full production certification.
+
 ## Proxmox / Windows Server live lab
 
 A **Windows Server VM is not automatically a Domain Controller**. To test real 4740 collection, use an isolated lab DC with AD DS and a domain-joined Windows 11 VM. Consult [the lab integration guide](verification/PROXMOX_AD_LAB.md) and run the read-only, privacy-safe [4740 field verifier](verification/Test-Lab4740.ps1) after inducing a lockout manually for a disposable lab-only account.
