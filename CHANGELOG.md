@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.3 — 2026-10-09
+
+- Close JSONL StreamReader handles deterministically using try/finally, including on corrupted event records and journal tail validation errors.
+- Prevent Windows Pester TestDrive cleanup failures from locked JSONL files.
+- Add regression tests that reopen failed journal files with exclusive Windows file access and then delete them.
+- Fail CI if Pester reports any failed test container, not only assertion failures.
+- Gate automatic GitHub release publication on successful Windows PowerShell 5.1 CI for the current main commit. The v1.0.2 release remains immutable.
+
+No journal schema, account-lockout event mapping, SMTP behavior or Active Directory configuration changes.
+
 ## v1.0.2 candidate — Native Event 4740 correctness
 
 - Fix StrictMode exceptions on empty EventData nodes using XML InnerText.

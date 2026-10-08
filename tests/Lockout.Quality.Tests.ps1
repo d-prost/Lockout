@@ -43,6 +43,28 @@ Describe 'Journal recovery rejects untrusted segment metadata' {
         { Get-LastJournalRecordId -DataDirectory $script:root -SourceKey $script:key } |
             Should -Throw '*Invalid journal segment*'
     }
+    It 'releases the journal handle after a failed tail validation' {
+        $path = Write-JournalSegment -DataDirectory $script:root -DomainController $script:dc -Records @((New-QualityRecord 10 $script:dc))
+        [IO.File]::WriteAllText($path,'{"RecordId":')
+        { Get-LastJournalRecordId -DataDirectory $script:root -SourceKey $script:key } |
+            Should -Throw '*Invalid journal segment*'
+        # Unter Windows darf kein StreamReader nach einem Fehler weiter sperren.
+        $exclusive = [IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+        try { $exclusive.CanWrite | Should -BeTrue }
+        finally { $exclusive.Dispose() }
+        [IO.File]::Delete($path)
+        (Test-Path -LiteralPath $path) | Should -BeFalse
+    }
+    It 'releases the journal handle after a failed record read' {
+        $path = Write-JournalSegment -DataDirectory $script:root -DomainController $script:dc -Records @((New-QualityRecord 10 $script:dc))
+        [IO.File]::WriteAllText($path,'{"RecordId":')
+        { @(Read-JournalSegment -Path $path) } | Should -Throw
+        $exclusive = [IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+        try { $exclusive.CanRead | Should -BeTrue }
+        finally { $exclusive.Dispose() }
+        [IO.File]::Delete($path)
+        (Test-Path -LiteralPath $path) | Should -BeFalse
+    }
     It 'rejects overlapping ranges even when they are in different collection dates' {
         $day = [datetime]::UtcNow.AddDays(-2)
         [void](Write-JournalSegment -DataDirectory $script:root -DomainController $script:dc -Records @((New-QualityRecord 10 $script:dc),(New-QualityRecord 12 $script:dc)) -CollectedUtc $day)
