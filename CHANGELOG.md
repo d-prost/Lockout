@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.0.2 candidate — Native Event 4740 correctness
+
+- Fix StrictMode exceptions on empty EventData nodes using XML InnerText.
+- Read native 4740 caller name from TargetDomainName while preserving explicit normalized CallerComputerName when present.
+- Stop mislabeling caller workstation as the domain of the locked account; preserve TargetSid and raw subject/caller evidence.
+- Use TargetSid for cross-domain SMTP cooldown identification when available.
+- Make on-demand Investigator skip malformed XML events with warnings, preserving subsequent results.
+- Support qualified/unqualified historical account filters without claiming native domain validation.
+- Add Pester regression fixtures and an isolated Proxmox Windows Server/Windows 11 real-event verification guide.
+
+Live lab integration remains pending; the historical journal is not rewritten automatically.
+
 ## v1.0.1 — 2026-10-08
 
 Quality & Simplification maintenance release; no changes to the canonical event, state or outbox file schemas.
