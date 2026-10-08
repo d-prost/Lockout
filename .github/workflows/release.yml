@@ -1,30 +1,41 @@
-name: Publish production-oriented v1.0.2
+name: Publish production-oriented v1.0.3
 on:
-  push:
+  workflow_run:
+    workflows: ["Windows PowerShell 5.1 tests"]
+    types: [completed]
     branches: [main]
-  workflow_dispatch:
 permissions:
   contents: write
 concurrency:
-  group: initial-release-v1-0-2
+  group: initial-release-v1-0-3
   cancel-in-progress: false
 jobs:
   release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Publish signed-off release notes
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - name: Publish only after successful Windows CI on current main
         env:
           GH_TOKEN: ${{ github.token }}
+          CI_COMMIT: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if gh release view v1.0.2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release v1.0.2 already exists; no changes."
+          git fetch --no-tags origin main
+          if [ "$(git rev-parse origin/main)" != "$CI_COMMIT" ]; then
+            echo "Successful CI commit is no longer the main branch head; skipping stale release."
             exit 0
           fi
-          gh release create v1.0.2 --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "AD Account Lockout Monitor & Investigator v1.0.2" \
-            --notes-file docs/RELEASE_NOTES_v1.0.2.md \
+          if gh release view v1.0.3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v1.0.3 already exists; no changes."
+            exit 0
+          fi
+          gh release create v1.0.3 --repo "$GITHUB_REPOSITORY" \
+            --target "$CI_COMMIT" \
+            --title "AD Account Lockout Monitor & Investigator v1.0.3" \
+            --notes-file docs/RELEASE_NOTES_v1.0.3.md \
             --latest
-          gh release view v1.0.2 --repo "$GITHUB_REPOSITORY" --json url,tagName
+          gh release view v1.0.3 --repo "$GITHUB_REPOSITORY" --json url,tagName
