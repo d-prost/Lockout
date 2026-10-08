@@ -58,15 +58,63 @@ function Get-JournalSegments {
     Get-ChildItem -LiteralPath $path -Filter '*.jsonl' -File -Recurse | Sort-Object FullName
 }
 
-function Get-LastJournalRecordId {
-    param([string]$DataDirectory, [string]$SourceKey)
-    [long]$last = 0
-    foreach ($file in @(Get-JournalSegments -DataDirectory $DataDirectory -SourceKey $SourceKey)) {
-        if ($file.BaseName -notmatch '^\d{20}-(\d{20})$') { throw "Unexpected journal segment name: $($file.Name)" }
-        $endId = [long]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
-        if ($endId -gt $last) { $last = $endId }
+function Assert-JournalSegmentTail {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$SourceKey,
+        [Parameter(Mandatory)][long]$FirstId,
+        [Parameter(Mandatory)][long]$LastId
+    )
+    # Der letzte persistierte Abschnitt muss tatsaechlich zur Quelle und zum Dateinamen passen.
+    [long]$previous = 0
+    $count = 0
+    foreach ($line in [IO.File]::ReadLines($Path)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        try {
+            $row = ConvertFrom-Json -InputObject $line -ErrorAction Stop
+            $id = [long]$row.RecordId
+            if ($id -lt 1 -or $id -le $previous) { throw 'RecordId is invalid or out of order.' }
+            if ((Get-SourceKey -Name ([string]$row.DomainController)) -cne $SourceKey) {
+                throw 'DomainController does not match journal source.'
+            }
+            if ([int]$row.EventId -ne 4740 -or [string]::IsNullOrWhiteSpace([string]$row.Account)) {
+                throw 'Event identity is incomplete.'
+            }
+            if ($count -eq 0 -and $id -ne $FirstId) { throw 'First RecordId does not match filename.' }
+            $count++
+            $previous = $id
+        } catch {
+            throw ("Invalid journal segment {0}: {1}" -f $Path,$_.Exception.Message)
+        }
     }
-    return $last
+    if ($count -eq 0 -or $previous -ne $LastId) {
+        throw ("Invalid journal segment {0}: last RecordId or record count does not match filename." -f $Path)
+    }
+}
+
+function Get-LastJournalRecordId {
+    [CmdletBinding()]
+    param([string]$DataDirectory, [string]$SourceKey)
+    # Dateinamen liefern nur die Bereiche. Die letzte Datei wird vor einem Cursor-Recovery geprueft.
+    $ranges = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($file in @(Get-JournalSegments -DataDirectory $DataDirectory -SourceKey $SourceKey)) {
+        if ($file.BaseName -notmatch '^(\d{20})-(\d{20})$') { throw "Unexpected journal segment name: $($file.Name)" }
+        [long]$first = [long]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
+        [long]$end = [long]::Parse($Matches[2], [Globalization.CultureInfo]::InvariantCulture)
+        if ($first -lt 1 -or $end -lt $first) { throw "Invalid journal RecordId range: $($file.FullName)" }
+        [void]$ranges.Add([pscustomobject]@{ First = $first; Last = $end; Path = $file.FullName })
+    }
+    if ($ranges.Count -eq 0) { return [long]0 }
+    $sorted = @($ranges.ToArray() | Sort-Object -Property First,Last)
+    [long]$priorEnd = 0
+    foreach ($segment in $sorted) {
+        if ($segment.First -le $priorEnd) { throw "Overlapping journal RecordId ranges: $($segment.Path)" }
+        $priorEnd = [long]$segment.Last
+    }
+    $tail = $sorted[-1]
+    Assert-JournalSegmentTail -Path $tail.Path -SourceKey $SourceKey -FirstId $tail.First -LastId $tail.Last
+    return [long]$tail.Last
 }
 
 function Get-JournalPaths {
