@@ -208,11 +208,16 @@ function Invoke-LockoutMonitor {
                 if ([long]$state.Cursor -lt [long]$bounds.Latest) { [void]$backlog.Add($dc) }
             } catch { [void]$issues.Add(('{0}: {1}' -f $dc,$_.Exception.Message)) }
         }
-        foreach ($err in @(Invoke-PendingMail -DataDirectory $root -DomainControllers @($Config.DomainControllers) -Mail $Config.Mail)) {
-            if ($err) { [void]$issues.Add([string]$err) }
-        }
-        $cleanup = Invoke-JournalRetention -DataDirectory $root -RetentionDays ([int]$Config.RetentionDays)
-        if ($cleanup.Blocked -gt 0) { [void]$issues.Add(('Retention blocked by {0} pending SMTP segment(s).' -f $cleanup.Blocked)) }
+        try {
+            foreach ($err in @(Invoke-PendingMail -DataDirectory $root -DomainControllers @($Config.DomainControllers) -Mail $Config.Mail)) {
+                if ($err) { [void]$issues.Add([string]$err) }
+            }
+        } catch { [void]$issues.Add(('SMTP outbox processing: ' + $_.Exception.Message)) }
+        $cleanup = [pscustomobject]@{Removed=0;Blocked=0;Checked=0}
+        try {
+            $cleanup = Invoke-JournalRetention -DataDirectory $root -RetentionDays ([int]$Config.RetentionDays)
+            if ($cleanup.Blocked -gt 0) { [void]$issues.Add(('Retention blocked by {0} pending SMTP segment(s).' -f $cleanup.Blocked)) }
+        } catch { [void]$issues.Add(('Retention processing: ' + $_.Exception.Message)) }
         $status = if ($issues.Count -gt 0) { 'ERROR' } elseif ($backlog.Count -gt 0) { 'BACKLOG' } else { 'OK' }
         Write-JsonAtomic -Path (Join-Path $root 'heartbeat.json') -Value ([ordered]@{
             TimeUtc=[datetime]::UtcNow.ToString('o');Status=$status
