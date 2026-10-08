@@ -174,6 +174,28 @@ Describe 'Restart and source failures' {
         $global:LockoutFixture.MailSent | Should -Be 1
     }
 
+    It 'prevents concurrent writers from another session through exclusive file lock' {
+        [void][IO.Directory]::CreateDirectory($script:root)
+        $lockPath = Join-Path $script:root 'writer.lock'
+        $handle = [IO.File]::Open($lockPath,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+        try {
+            { Invoke-LockoutMonitor -Config $script:config } | Should -Throw '*writer lock*'
+        } finally { $handle.Dispose() }
+        $global:LockoutFixture.Events[$script:dcA] = @(New-TestEvent 1 $script:dcA)
+        Invoke-LockoutMonitor -Config $script:config
+        @(Get-TestRows $script:root $script:dcA).Count | Should -Be 1
+    }
+
+    It 'reconstructs a missing text log from canonical JSONL' {
+        $global:LockoutFixture.Events[$script:dcA] = @(New-TestEvent 1 $script:dcA)
+        Invoke-LockoutMonitor -Config $script:config
+        $src = Get-SourceKey $script:dcA
+        $log = @(Get-ChildItem -LiteralPath (Join-Path (Join-Path $script:root 'logs') $src) -Filter '*.log' -Recurse -File)[0]
+        Remove-Item -LiteralPath $log.FullName -Force
+        Invoke-LockoutMonitor -Config $script:config
+        (Test-Path -LiteralPath $log.FullName) | Should -BeTrue
+    }
+
     It 'refuses rollback of the source Security record number' {
         $global:LockoutFixture.Latest[$script:dcA] = [long]2
         $global:LockoutFixture.Events[$script:dcA] = @(New-TestEvent 2 $script:dcA)
