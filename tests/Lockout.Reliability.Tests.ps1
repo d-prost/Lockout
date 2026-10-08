@@ -2,6 +2,7 @@
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '..\src\Lockout.Runner.psm1') -Force
     Import-Module (Join-Path $PSScriptRoot '..\src\Lockout.Storage.psm1') -Force
+    Import-Module (Join-Path $PSScriptRoot '..\src\Lockout.Core.psm1') -Force
 
     function New-TestEvent {
         param([long]$RecordId, [string]$DomainController='dc01.example.test', [string]$Account='testuser')
