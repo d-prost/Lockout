@@ -13,7 +13,7 @@ function Get-EventBounds {
 
 function Get-LockoutWindow {
     param([string]$DomainController,[long]$AfterId,[long]$UntilId,[datetime]$SinceUtc=[datetime]::MinValue)
-    $xpath = "Event[System[(EventID=4740) and (EventRecordID > $AfterId) and (EventRecordID <= $UntilId)"
+    $xpath = "*[System[(EventID=4740) and (EventRecordID > $AfterId) and (EventRecordID <= $UntilId)"
     if ($SinceUtc -gt [datetime]::MinValue) {
         $stamp = $SinceUtc.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
         $xpath += " and TimeCreated[@SystemTime >= '$stamp']"
@@ -148,12 +148,15 @@ function Invoke-LockoutMonitor {
     $root = Assert-LockoutConfig $Config
     [void][IO.Directory]::CreateDirectory($root)
     [void][IO.Directory]::CreateDirectory((Join-Path $root 'state'))
-    $mutex = [Threading.Mutex]::new($false,('Local\ADLockout-' + (Get-SourceKey $root)))
-    $locked = $false
+    # NTFS-Dateisperre wirkt sitzungsuebergreifend, ohne globale Mutex-Berechtigungen.
+    $lockFile = Join-Path $root 'writer.lock'
+    $lockHandle = $null
     try {
-        try { $locked = $mutex.WaitOne(10000) }
-        catch [Threading.AbandonedMutexException] { $locked = $true }
-        if (-not $locked) { throw 'Another monitor instance owns this directory.' }
+        try {
+            $lockHandle = [IO.File]::Open($lockFile,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+        } catch [IO.IOException] {
+            throw ('Unable to acquire exclusive local writer lock: ' + $_.Exception.Message)
+        }
         $issues = New-Object 'System.Collections.Generic.List[string]'
         $backlog = New-Object 'System.Collections.Generic.List[string]'
         foreach ($inputDc in @($Config.DomainControllers)) {
@@ -217,8 +220,7 @@ function Invoke-LockoutMonitor {
         })
         if ($issues.Count) { throw ($issues -join '; ') }
     } finally {
-        if ($locked) { $mutex.ReleaseMutex() }
-        $mutex.Dispose()
+        if ($null -ne $lockHandle) { $lockHandle.Dispose() }
     }
 }
 Export-ModuleMember -Function Invoke-LockoutMonitor
