@@ -1,103 +1,106 @@
 # AD Account Lockout Monitor & Investigator
 
-A small read-only Active Directory account lockout monitoring and investigation tool for **Windows PowerShell 5.1**. No database, no web server, no cloud service and no Active Directory writes.
+A lightweight, read-only Active Directory account lockout monitor and investigator for **Windows PowerShell 5.1**. No database, web server, cloud subscription, PowerShell 7, or AD writes.
 
-**Status: PILOT / release candidate. Production deployment requires a Windows Server integration test and successful CI.**
+**Production-oriented v1.0.0.** Windows CI with synthetic events and storage benchmarks is available. Live Windows Server, DC Security Log, Scheduled Task and SMTP integration have **not** been verified in a real customer environment. Deployers must authorize and assess their own environment; a release is not a security certification.
 
-## Features
+## Scope
 
-- Monitor Security Event ID 4740 on explicitly configured Domain Controllers.
-- Maintain a separate high-water mark per DC in cursor.json.
-- Store lockouts as durable, deduplicated canonical event JSON files.
-- Reconstruct lockouts.jsonl and lockouts.log from that event store.
-- Optional HTML SMTP alerting with cooldown and persisted send state.
-- Interactive read-only investigation using Security Events 4740, 4625, 4771 and 4776.
-- Root cause remains Undetermined; the 4740 caller is an observed host field, never a validated origin IP.
+- Monitor Security Event ID **4740** on multiple explicitly named Domain Controllers
+- One checkpoint per DC, bounded event-record windows and per-run workload caps
+- Immutable JSONL segments plus regenerable human-readable log projections
+- Crash-safe journal-before-checkpoint ordering and recovery from interrupted state writes
+- Explicit detection of source log rollback and known retention gaps
+- Local date-based retention (30 days by default), preserving segments with pending eligible emails
+- Optional HTML SMTP with persistent retry, durable offsets and account-specific cooldown
+- On-demand read-only investigator for events **4740 / 4625 / 4771 / 4776**
+- No external runtime modules, SQL database, SIEM or cloud services
+- Repeatable installation with dry-run, immutable code releases and protected private configuration
 
-## Installation
+**Root-cause policy:** a 4740 CallerComputerName is a reported observation, not a proven origin. Likewise, a 4625/4771/4776 workstation name or IP is evidence only. Results explicitly keep RootCause = Undetermined.
 
-1. Copy the repository to a controlled Windows management host.
-2. Copy config/config.example.psd1 to config/config.psd1 and set the DC FQDNs.
-3. Leave Mail.Enabled set to false for first tests.
-4. Protect the configured DataDirectory (default C:\ProgramData\LockoutMonitor) with NTFS ACL allowing SYSTEM, administrators and the monitoring account. Use a local directory, not UNC.
-5. Run from the repository root using Windows PowerShell 5.1:
+## Requirements
 
-    powershell.exe -NoProfile -File .\LockoutMonitor.ps1
+Windows Server or Windows management workstation, PowerShell 5.1, built-in ScheduledTasks module, local NTFS volume, and authorized read access to relevant DC Security event logs. Use a dedicated least-privilege identity, never Domain Admin for this purpose. Configure auditing and network rules separately through approved administration procedures. This tool does not modify audit policy, user accounts or domain configuration.
 
-6. Verify cursor.json, heartbeat.json, events/, lockouts.jsonl and lockouts.log.
-7. Create a Scheduled Task every 1-5 minutes under an approved least-privilege identity. Use an explicit action path and non-overlap setting. The script additionally has a named mutex.
-8. Enable SMTP only after assessing historical event backlog.
+## Installation and upgrade
 
-Task action:
+Detailed procedure: [docs/INSTALLATION.md](docs/INSTALLATION.md)
 
-    C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -File "C:\Tools\Lockout\LockoutMonitor.ps1"
+Preview, no changes:
 
-The monitoring account needs permission to read Security event logs on each configured DC. Do not give it Domain Admin and do not open remote event log access beyond trusted management systems. Follow enterprise code-signing policy; do not bypass execution policy by default.
+    .\Install-LockoutMonitor.ps1 -RunAs 'EXAMPLE\svc-lockout'
+
+Apply in elevated Windows PowerShell 5.1:
+
+    .\Install-LockoutMonitor.ps1 -RunAs 'EXAMPLE\svc-lockout' -Apply
+
+The first application creates a private configuration file in C:\ProgramData\LockoutMonitor\config.psd1 and stops until placeholder DC names are replaced. Edit it, then rerun. The installer copies code into fingerprinted immutable directories under Program Files; existing private config and journal are not overwritten. Replacing a different Scheduled Task requires explicit -UpdateTask and saves its former XML definition. An unchanged second run is a no-op.
+
+## Configuration
+
+Template: [config/config.example.psd1](config/config.example.psd1).
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| DataDirectory | C:\ProgramData\LockoutMonitor | Must be local NTFS |
+| DomainControllers | Example FQDNs | Replace before task registration |
+| InitialLookbackMinutes | 15 | Only first bootstrapping |
+| RecordWindowSize | 10000 | Max Security RecordId span per query |
+| MaxWindowsPerRun | 20 | Bounded work per run |
+| BatchRecords | 500 | Records per durable JSONL segment |
+| RetentionDays | 30 | Based on local collection date |
+| Mail.Enabled | false | Optional and off by default |
+| Mail.CooldownMinutes | 15 | Suppress repeated account notifications |
+
+Data layout:
+
+    DataDirectory/
+      config.psd1
+      state/<DC-hash>.json
+      journal/<DC-hash>/YYYYMMDD/<firstId>-<lastId>.jsonl
+      logs/<DC-hash>/YYYYMMDD/<firstId>-<lastId>.log
+      outbox/<DC-hash>/<segment>.json
+      cooldown.json
+      heartbeat.json
+      writer.lock
+      task-backups/
+
+The file-based exclusive writer lock applies across local Windows sessions. It does not coordinate separate servers.
 
 ## Investigation
 
-Example:
+    .\Investigate-Lockout.ps1 -Account 'EXAMPLE\alice' -DomainControllers dc01.example.org,dc02.example.org -Minutes 15
 
-    powershell.exe -NoProfile -File .\Investigate-Lockout.ps1 -Account 'EXAMPLE\alice' -DomainControllers dc01.example.org,dc02.example.org -Minutes 15
-
-Event evidence:
-
-| Event | Data examined | Interpretation |
+| Event | Field | Evidence only |
 | --- | --- | --- |
-| 4740 | CallerComputerName | Named caller in lockout event, not proven culprit |
+| 4740 | CallerComputerName | Lockout's reported caller |
 | 4625 | IpAddress, WorkstationName | Failed logon observation |
-| 4771 | IpAddress | Kerberos client address reported by the event |
-| 4776 | Workstation | NTLM source workstation field |
+| 4771 | IpAddress | Kerberos client address in event |
+| 4776 | Workstation | NTLM reported source workstation |
 
-Correlation is temporal only. A matching account name is not a validated SID/domain association, and a reported workstation or IP is not a proven root cause. The investigator is intentionally capped by time and event count.
+Investigation matches an account name within a bounded time window. It does not establish SID-level correlation or a confirmed root cause.
 
-## SMTP
+## Guarantees and limits
 
-Config is a PowerShell data file. HTML field values are encoded. Optional SMTP credentials may be stored with Windows DPAPI under the same task identity and host:
+- Canonical journal segments are written before DC checkpoints and have immutable event ID ranges. Startup recovery detects an already-written segment after an interrupted checkpoint write.
+- Security log retention can erase source events permanently. Detected gaps or record-number rollback cause errors rather than advancing the cursor silently; unusual log resets that reuse IDs may evade detection.
+- SMTP is at-least-once, not exactly-once. A crash immediately after a successful send may cause a duplicate message.
+- Alert-eligible segments stay on disk until the outgoing offset acknowledges them. A stuck email backlog delays expiration and raises an error.
+- Journal size is bounded by batch rotation plus retention; administrators should monitor free disk space, task status and heartbeat health.
+- Event records contain potentially personal data; organizations must set approved storage permissions and retention policies.
 
-    Get-Credential | Export-Clixml -Path 'C:\ProgramData\LockoutMonitor\smtp-cred.xml'
+## References
 
-Set the CredentialFile path in private config; do not commit private credentials. Use an approved SMTP relay. SmtpClient supports STARTTLS, not implicit port-465 TLS. SMTP is at-least-once: if delivery succeeds but the process crashes before mail-state.json updates, the message may be sent twice. Failed sends retry on later runs. Cooldown applies after successful sends. Enabling mail may notify for old events in the store.
+- [Installation](docs/INSTALLATION.md)
+- [Troubleshooting and recovery](docs/TROUBLESHOOTING.md)
+- [Tests and 10k/100k benchmarks](docs/TESTING.md)
+- [Security policy](SECURITY.md)
+- [Engineering review](docs/ENGINEERING_REVIEW.md)
+- [Microsoft Get-WinEvent](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.diagnostics/get-winevent?view=powershell-5.1)
 
-## Reliability and limitations
+## Competing products
 
-- Canonical event files are written before the per-DC cursor. A crash can replay events, while the same DC+record ID is stored only once.
-- Security log reset to a lower record ID is treated as an error and requires manual investigation.
-- Source log retention can cause permanent gaps after prolonged downtime. No tool can recover events that the DC discarded; monitor heartbeat and retention.
-- DCs must have event-auditing enabled and be reachable. One failing DC is reported without preventing reads from other DCs.
-- The generated output is rebuilt on each run. Establish a retention/archive policy for long-running installations; performance will degrade for very large stores. Do not delete canonical event files without an approved archive/rebuild procedure.
-- The local mutex does not coordinate multiple running hosts. Run a single writer per configured data directory.
-- The script never unlocks AD accounts or changes domain policies.
-- Logs contain personal data and should have bounded retention and least-privilege NTFS access.
-- No exactly-once SMTP or universal forensic attribution claims are made.
+[AD-PowerAdmin](https://github.com/Brets0150/AD-PowerAdmin) covers broader AD security auditing. [Direnix](https://github.com/wgerade/direnix) is a broader C# identity operations tool. [Microsoft Account Lockout and Management Tools](https://www.microsoft.com/en-us/download/details.aspx?id=18465) provide traditional diagnostics. This repo targets small, maintainable, journal-backed monitoring without a new server platform. No competitor code has been copied.
 
-## Troubleshooting
-
-| Symptom | Action |
-| --- | --- |
-| Access denied | Check task identity, per-DC Security log ACL and network/RPC restrictions |
-| No events | Check audit policy, DC, initial lookback window and Security log |
-| Task failed | Check stderr, Task Scheduler history and heartbeat.json |
-| SMTP errors | Check relay, recipient restrictions, STARTTLS and DPAPI identity |
-| Security log reset | Preserve old state and logs, investigate and reinitialize under change control |
-| Historical mail storm | Leave mail disabled until old store is archived or eligibility is reviewed |
-
-## Tests and release gate
-
-.github/workflows/test.yml parses all scripts in Windows PowerShell 5.1 and runs Pester unit tests. The tests use synthetic event XML. This is not a substitute for Windows integration testing of DC permissions, log rotation/reset, connectivity loss, SMTP, scheduled execution and stress behavior.
-
-## Alternatives
-
-- [AD-PowerAdmin](https://github.com/Brets0150/AD-PowerAdmin): broader PowerShell AD security auditing. No verifiable license file was found in its root during initial review.
-- [Direnix](https://github.com/wgerade/direnix): broader C# identity operations product under MIT; larger operational scope.
-- [Microsoft Account Lockout and Management Tools](https://www.microsoft.com/en-us/download/details.aspx?id=18465): established classic account lockout diagnostics.
-- A filename alone (Account_Lockout.ps1) does not identify a unique GitHub project for a responsible comparison.
-
-No competitor source code is copied. MIT License; see LICENSE.
-
-## Microsoft documentation
-
-- https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4740
-- https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4625
-- https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4771
-- https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4776
+License: MIT. See [LICENSE](LICENSE).
