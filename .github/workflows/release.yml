@@ -1,0 +1,30 @@
+name: Publish production-oriented v1.0.0
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: initial-release-v1-0-0
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish signed-off release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v1.0.0 already exists; no changes."
+            exit 0
+          fi
+          gh release create v1.0.0 --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "AD Account Lockout Monitor & Investigator v1.0.0" \
+            --notes-file docs/RELEASE_NOTES_v1.0.0.md \
+            --latest
+          gh release view v1.0.0 --repo "$GITHUB_REPOSITORY" --json url,tagName
