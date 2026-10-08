@@ -77,3 +77,13 @@ The upstream event-schema review and external verification found that native Eve
 The Account display name is now unqualified in new event records. TargetSid remains the stable discriminator for SMTP cooldown where available. Previously persisted journal events are not rewritten.
 
 The Windows/11-Proxmox manual integration procedure is documented in verification/PROXMOX_AD_LAB.md. Passing the synthetic test suite is not evidence of having read live DC Security events.
+
+## v1.0.2 — documented live lab observation
+
+An operator tested this branch with **Windows Server 2025, Windows PowerShell 5.1 and an actual isolated lab Domain Controller**, including a real Security Event 4740 following a disposable lab-account lockout. The operator reported native TargetDomainName caller mapping, one event after two monitor runs, correct viewer/investigator output, and no unsupported IP/root-cause inference. The reporter was able to validate the previously empty-XML failure on Windows PowerShell 5.1.
+
+**Independently checked GitHub CI:** [Run 37838548231](https://github.com/d-prost/Lockout/actions/runs/37838548231), head 08d82768, completed successfully with 44/44 Pester tests, no Error-level PSScriptAnalyzer findings, and 10k/100k synthetic journal benchmarks.
+
+**Evidence boundary:** this live test is reported by the operator; maintainers did not remotely access the DC or ingest raw Security XML. Only one DC, with lockout originating on the DC, was exercised. Tests did **not** prove Windows 11 remote caller mapping, 4776 identity correlation, second-DC processing, live SMTP, or least-privilege Scheduled Task behavior. See [sanitized report](../verification/LAB_ACCEPTANCE.md) and [issue #4](https://github.com/d-prost/Lockout/issues/4).
+
+**Decision:** accept correctness of the native 4740 field fix in the reported lab scenario, without claiming complete deployment certification.
