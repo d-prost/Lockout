@@ -68,7 +68,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $accountSid = ([Security.Principal.NTAccount]::new($RunAs)).Translate([Security.Principal.SecurityIdentifier])
 
 $files = @(
-    'LockoutMonitor.ps1','Investigate-Lockout.ps1',
+    'LockoutMonitor.ps1','Investigate-Lockout.ps1','Get-LockoutEvents.ps1',
     'src\Lockout.Core.psm1','src\Lockout.Runner.psm1','src\Lockout.Storage.psm1'
 )
 [void][IO.Directory]::CreateDirectory((Join-Path $InstallRoot 'releases'))
