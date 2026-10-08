@@ -22,6 +22,14 @@ jobs:
             if ($errors) { $failed = $true; $errors | Out-String | Write-Error }
           }
           if ($failed) { exit 1 }
+      - name: Independent static rules with PSScriptAnalyzer
+        shell: powershell
+        run: |
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
+          $errors = @(Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error)
+          if ($errors.Count -gt 0) { $errors | Format-Table RuleName, Message, ScriptPath, Line -AutoSize; exit 1 }
+          Write-Output "STATIC_REVIEW_PASS: zero PSScriptAnalyzer errors."
       - name: Run Pester 5 unit tests
         shell: powershell
         run: |
