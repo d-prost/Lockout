@@ -66,27 +66,33 @@ function Assert-JournalSegmentTail {
         [Parameter(Mandatory)][long]$FirstId,
         [Parameter(Mandatory)][long]$LastId
     )
-    # Der letzte persistierte Abschnitt muss tatsaechlich zur Quelle und zum Dateinamen passen.
+    # Der Reader muss auch nach einem Parsefehler explizit geschlossen werden.
+    # Andernfalls kann Windows das Test-Journal und spaeter abgelaufene Dateien sperren.
     [long]$previous = 0
     $count = 0
-    foreach ($line in [IO.File]::ReadLines($Path)) {
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try {
-            $row = ConvertFrom-Json -InputObject $line -ErrorAction Stop
-            $id = [long]$row.RecordId
-            if ($id -lt 1 -or $id -le $previous) { throw 'RecordId is invalid or out of order.' }
-            if ((Get-SourceKey -Name ([string]$row.DomainController)) -cne $SourceKey) {
-                throw 'DomainController does not match journal source.'
+    $reader = [IO.File]::OpenText($Path)
+    try {
+        while ($null -ne ($line = $reader.ReadLine())) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $row = ConvertFrom-Json -InputObject $line -ErrorAction Stop
+                $id = [long]$row.RecordId
+                if ($id -lt 1 -or $id -le $previous) { throw 'RecordId is invalid or out of order.' }
+                if ((Get-SourceKey -Name ([string]$row.DomainController)) -cne $SourceKey) {
+                    throw 'DomainController does not match journal source.'
+                }
+                if ([int]$row.EventId -ne 4740 -or [string]::IsNullOrWhiteSpace([string]$row.Account)) {
+                    throw 'Event identity is incomplete.'
+                }
+                if ($count -eq 0 -and $id -ne $FirstId) { throw 'First RecordId does not match filename.' }
+                $count++
+                $previous = $id
+            } catch {
+                throw ("Invalid journal segment {0}: {1}" -f $Path,$_.Exception.Message)
             }
-            if ([int]$row.EventId -ne 4740 -or [string]::IsNullOrWhiteSpace([string]$row.Account)) {
-                throw 'Event identity is incomplete.'
-            }
-            if ($count -eq 0 -and $id -ne $FirstId) { throw 'First RecordId does not match filename.' }
-            $count++
-            $previous = $id
-        } catch {
-            throw ("Invalid journal segment {0}: {1}" -f $Path,$_.Exception.Message)
         }
+    } finally {
+        $reader.Dispose()
     }
     if ($count -eq 0 -or $previous -ne $LastId) {
         throw ("Invalid journal segment {0}: last RecordId or record count does not match filename." -f $Path)
@@ -167,8 +173,16 @@ function Write-JournalSegment {
 function Read-JournalSegment {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Path)
-    foreach ($line in [IO.File]::ReadLines($Path)) {
-        if (-not [string]::IsNullOrWhiteSpace($line)) { ConvertFrom-Json -InputObject $line -ErrorAction Stop }
+    # Auch bei fehlerhaftem JSON oder abgebrochenem Aufruf den Datei-Handle freigeben.
+    $reader = [IO.File]::OpenText($Path)
+    try {
+        while ($null -ne ($line = $reader.ReadLine())) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                ConvertFrom-Json -InputObject $line -ErrorAction Stop
+            }
+        }
+    } finally {
+        $reader.Dispose()
     }
 }
 
