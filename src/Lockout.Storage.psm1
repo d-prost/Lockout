@@ -22,18 +22,22 @@ function Write-AtomicText {
         return
     }
     $temporary = Join-Path $parent ([guid]::NewGuid().ToString('N') + '.tmp')
+    $backup = Join-Path $parent ([guid]::NewGuid().ToString('N') + '.bak')
     try {
         [IO.File]::WriteAllText($temporary, $Text, $utf8)
         if ([IO.File]::Exists($Path)) {
             if ($Immutable) {
                 if ([IO.File]::ReadAllText($Path, $utf8) -cne $Text) { throw "Journal collision or corruption: $Path" }
             } else {
-                [IO.File]::Replace($temporary, $Path, $null)
+                [IO.File]::Replace($temporary, $Path, $backup)
             }
         } else {
             [IO.File]::Move($temporary, $Path)
         }
-    } finally { if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) } }
+    } finally {
+        if ([IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }
+        if ([IO.File]::Exists($backup)) { [IO.File]::Delete($backup) }
+    }
 }
 
 function Write-JsonAtomic {
