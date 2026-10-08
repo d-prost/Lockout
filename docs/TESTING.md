@@ -69,3 +69,11 @@ Current release policy allows publishing with these unverified, **but that is an
 The quality release removes duplicate JSON helper functions, validates the final journal segment before adopting its RecordId for cursor recovery, and compares task privileges, actions and triggers when assessing installation idempotence. It also includes a read-only cross-DC history command. These changes preserve the v1.0.0 on-disk state/journal schema.
 
 Validation must pass on the **v1.0.1 PR head** before merge; do not reuse passing results from v1.0.0 as proof of the new changes. No live Active Directory integration tests are claimed.
+
+## v1.0.2 native Event 4740 parsing regression
+
+The upstream event-schema review and external verification found that native Event 4740 XML names the reported caller workstation as TargetDomainName. Empty Data XML nodes caused exceptions under StrictMode. The patch tests both Windows PowerShell 5.1-compatible empty XML parsing and source attribution. Tests also cover absent caller, normalized input with a separate CallerComputerName, missing target-account error, and an investigator continuing after an invalid event.
+
+The Account display name is now unqualified in new event records. TargetSid remains the stable discriminator for SMTP cooldown where available. Previously persisted journal events are not rewritten.
+
+The Windows/11-Proxmox manual integration procedure is documented in verification/PROXMOX_AD_LAB.md. Passing the synthetic test suite is not evidence of having read live DC Security events.
