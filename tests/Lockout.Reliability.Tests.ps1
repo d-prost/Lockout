@@ -188,6 +188,22 @@ Describe 'Restart and source failures' {
         $global:LockoutFixture.MailSent | Should -Be 1
     }
 
+    It 'does not coalesce equal account names from different SIDs into one cooldown' {
+        $script:config.DomainControllers = @($script:dcA,$script:dcB)
+        $script:config.Mail.Enabled = $true
+        $script:config.Mail.CooldownMinutes = 15
+        $one = New-TestEvent 1 $script:dcA
+        $two = New-TestEvent 1 $script:dcB
+        $two.XmlText = $two.XmlText.Replace('S-1-5-21-123','S-1-5-21-999')
+        $global:LockoutFixture.Events[$script:dcA] = @($one)
+        $global:LockoutFixture.Events[$script:dcB] = @($two)
+        Mock -ModuleName Lockout.Runner -CommandName Send-Alert {
+            $global:LockoutFixture.MailSent++
+        }
+        Invoke-LockoutMonitor -Config $script:config
+        $global:LockoutFixture.MailSent | Should -Be 2
+    }
+
     It 'prevents concurrent writers from another session through exclusive file lock' {
         [void][IO.Directory]::CreateDirectory($script:root)
         $lockPath = Join-Path $script:root 'writer.lock'
