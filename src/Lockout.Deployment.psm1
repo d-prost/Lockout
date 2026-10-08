@@ -119,7 +119,7 @@ function Get-ReleaseFingerprint {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$SourceRoot)
     $files = @(
-        'LockoutMonitor.ps1','Investigate-Lockout.ps1',
+        'LockoutMonitor.ps1','Investigate-Lockout.ps1','Get-LockoutEvents.ps1',
         'src\Lockout.Core.psm1','src\Lockout.Runner.psm1',
         'src\Lockout.Storage.psm1'
     )
