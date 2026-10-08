@@ -1,0 +1,12 @@
+config/config.psd1
+*.clixml
+*.pfx
+*.p12
+*.key
+*.log
+*.jsonl
+cursor.json
+heartbeat.json
+mail-state.json
+/events/
+*.tmp
