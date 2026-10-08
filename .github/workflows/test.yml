@@ -1,0 +1,51 @@
+name: Windows PowerShell 5.1 tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: lockout-test-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell 5.1 scripts
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName,[ref]$tokens,[ref]$errors)
+            if ($errors) { $failed = $true; $errors | Out-String | Write-Error }
+          }
+          if ($failed) { exit 1 }
+      - name: Independent static rules with PSScriptAnalyzer
+        shell: powershell
+        run: |
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
+          $errors = @(Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error)
+          if ($errors.Count -gt 0) { $errors | Format-Table RuleName, Message, ScriptPath, Line -AutoSize; exit 1 }
+          Write-Output "STATIC_REVIEW_PASS: zero PSScriptAnalyzer errors."
+      - name: Run Pester 5 unit tests
+        shell: powershell
+        run: |
+          Install-Module -Name Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          Import-Module Pester -RequiredVersion 5.7.1
+          $r = Invoke-Pester -Path .\tests -PassThru
+          if ($r.FailedCount -gt 0 -or $r.PassedCount -eq 0) { exit 1 }
+
+      - name: Benchmark journal with 10,000 synthetic events
+        shell: powershell
+        run: |
+          .\tests\Measure-LockoutJournal.ps1 -EventCount 10000 -BatchRecords 500
+      - name: Benchmark journal with 100,000 synthetic events
+        shell: powershell
+        run: |
+          .\tests\Measure-LockoutJournal.ps1 -EventCount 100000 -BatchRecords 500

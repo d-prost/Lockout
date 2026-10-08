@@ -1,0 +1,28 @@
+# Private configuration and credential material
+config/config.psd1
+config.psd1
+*.clixml
+*.pfx
+*.p12
+*.key
+
+# Runtime state and potentially personal security-event data
+/state/
+/journal/
+/logs/
+/outbox/
+/events/
+/task-backups/
+cursor.json
+heartbeat.json
+mail-state.json
+cooldown.json
+writer.lock
+*.jsonl
+*.log
+*.tmp
+*.bak
+
+# Local IDE / scratch
+.vscode/
+.idea/
