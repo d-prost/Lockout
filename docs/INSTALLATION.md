@@ -24,13 +24,13 @@ Download a reviewed tagged source, inspect the source code, and run from its roo
 
 Preview must create no directories, tasks or credentials. For first-time staging, run an elevated PowerShell 5.1:
 
-    .\Install-LockoutMonitor.ps1 -RunAs 'EXAMPLE\svc-lockout' -Apply
+    .\Install-LockoutMonitor.ps1 -RunAs 'DOMAIN\svc-lockout' -DomainControllers dc01.corp.example,dc02.corp.example -Apply
 
-This stages immutable source files under Program Files and creates the private config if missing. First invocation intentionally exits before scheduling while example Domain Controllers remain.
+This is the recommended one-command path for a new installation. It stages immutable source files under Program Files and creates the private config with the explicit DCs only if it does not already exist. Verify RetentionDays and Mail.Enabled before scheduling, and keep email disabled until checked.
 
-Edit C:\ProgramData\LockoutMonitor\config.psd1. Replace all example DC names, select RetentionDays and initial lookback, and leave Mail.Enabled = $false until verified.
+Alternatively omit -DomainControllers: the installer creates an example config and stops before registering a task until you replace the placeholders. It requests the scheduled task account password only when Task Scheduler registration is required; no password is committed to Git.
 
-Repeat the exact installer command. It requests the scheduled task account password when task registration is required; it never stores it in the repository. Windows Task Scheduler stores credentials using Windows mechanisms.
+When an existing config contains different DCs, the installer intentionally refuses to replace it automatically. Edit the private config under change control, then rerun.
 
 Only newly created DataDirectory ACLs are set by the installer. For existing directories, review ACLs manually. Expected rights: SYSTEM/Administrators full, service identity modify; no broad Authenticated Users or Everyone write grants. Application code is required to live under Program Files to avoid ordinary-user modification.
 
@@ -93,3 +93,13 @@ The monitor does not guarantee exactly-once SMTP delivery. Review pending backlo
 ## 7. Operational caution
 
 The user has elected to waive mandatory live Windows Server and CI certification as release gates. This does not prove those tests have been performed. Check at least task success, heartbeat, DC read permissions, audit policy, log free space and SMTP relay behavior in each deployment. Do not confuse publishing an artifact with an operational sign-off.
+
+## 8. Readable lockout history
+
+Use a single command to display all DCs together without copying journal files to a new persistent log:
+
+    & 'C:\Program Files\LockoutMonitor\releases\<fingerprint>\Get-LockoutEvents.ps1' -Last 50
+
+If running from the downloaded source directory, simply execute Get-LockoutEvents.ps1 there. To restrict output to one account, use -Account 'EXAMPLE\alice'. Use -DataDirectory for non-default storage locations.
+
+The command is read-only; local NTFS access rights still apply. Do not expose real Security events in public support tickets.
