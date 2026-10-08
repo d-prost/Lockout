@@ -112,6 +112,7 @@ function Invoke-PendingMail {
         foreach ($segment in @(Get-JournalSegments -DataDirectory $DataDirectory -SourceKey $source)) {
             $offsetPath = Join-Path (Join-Path (Join-Path $DataDirectory 'outbox') $source) ($segment.BaseName + '.json')
             $state = Read-Json -Path $offsetPath -Default ([pscustomobject]@{Offset=0})
+            if ($state.PSObject.Properties.Name -contains 'Completed' -and [bool]$state.Completed) { continue }
             $offset = [int]$state.Offset
             $rows = @(Read-JournalSegment -Path $segment.FullName)
             if ($offset -lt 0 -or $offset -gt $rows.Count) { throw "Invalid SMTP offset: $offsetPath" }
@@ -134,7 +135,7 @@ function Invoke-PendingMail {
                         Write-JsonAtomic -Path $cooldownPath -Value ([ordered]@{LastByAccount=$last})
                     }
                 }
-                Write-JsonAtomic -Path $offsetPath -Value ([ordered]@{Offset=($i+1)})
+                Write-JsonAtomic -Path $offsetPath -Value ([ordered]@{Offset=($i+1);Completed=(($i+1) -eq $rows.Count)})
             }
         }
     }
