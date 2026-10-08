@@ -59,14 +59,41 @@ function Test-LockoutTaskDefinition {
     param([Parameter(Mandatory)][string]$ExistingXml,[Parameter(Mandatory)][string]$DesiredXml)
     [xml]$current = $ExistingXml
     [xml]$desired = $DesiredXml
+
+    # Nur genau eine Aktion, einen Trigger und ein Principal zulassen.
+    # Zusaetzliche Trigger/Aktionen duerfen nie als "unveraendert" gelten.
+    foreach ($path in @(
+        '//*[local-name()="Actions"]/*',
+        '//*[local-name()="Triggers"]/*',
+        '//*[local-name()="Principals"]/*'
+    )) {
+        if (@($current.SelectNodes($path)).Count -ne 1 -or @($desired.SelectNodes($path)).Count -ne 1) {
+            return $false
+        }
+        if ($current.SelectSingleNode($path).LocalName -cne $desired.SelectSingleNode($path).LocalName) {
+            return $false
+        }
+    }
+
     $queries = @(
         '//*[local-name()="Exec"]/*[local-name()="Command"]',
         '//*[local-name()="Exec"]/*[local-name()="Arguments"]',
         '//*[local-name()="Exec"]/*[local-name()="WorkingDirectory"]',
         '//*[local-name()="Principal"]/*[local-name()="UserId"]',
+        '//*[local-name()="Principal"]/*[local-name()="LogonType"]',
+        '//*[local-name()="Principal"]/*[local-name()="RunLevel"]',
+        '//*[local-name()="TimeTrigger"]/*[local-name()="Enabled"]',
         '//*[local-name()="TimeTrigger"]/*[local-name()="Repetition"]/*[local-name()="Interval"]',
+        '//*[local-name()="TimeTrigger"]/*[local-name()="Repetition"]/*[local-name()="StopAtDurationEnd"]',
         '//*[local-name()="Settings"]/*[local-name()="MultipleInstancesPolicy"]',
-        '//*[local-name()="Settings"]/*[local-name()="ExecutionTimeLimit"]'
+        '//*[local-name()="Settings"]/*[local-name()="ExecutionTimeLimit"]',
+        '//*[local-name()="Settings"]/*[local-name()="Enabled"]',
+        '//*[local-name()="Settings"]/*[local-name()="StartWhenAvailable"]',
+        '//*[local-name()="Settings"]/*[local-name()="AllowHardTerminate"]',
+        '//*[local-name()="Settings"]/*[local-name()="RunOnlyIfNetworkAvailable"]',
+        '//*[local-name()="Settings"]/*[local-name()="DisallowStartIfOnBatteries"]',
+        '//*[local-name()="Settings"]/*[local-name()="StopIfGoingOnBatteries"]',
+        '//*[local-name()="Settings"]/*[local-name()="Priority"]'
     )
     foreach ($query in $queries) {
         $left = $current.SelectSingleNode($query)
@@ -74,6 +101,17 @@ function Test-LockoutTaskDefinition {
         if ($null -eq $left -or $null -eq $right) { return $false }
         if ($left.InnerText -ine $right.InnerText) { return $false }
     }
+
+    # Eine nachtraeglich hinzugefuegte Wiederholungsdauer veraendert die Laufzeit.
+    $duration = '//*[local-name()="TimeTrigger"]/*[local-name()="Repetition"]/*[local-name()="Duration"]'
+    $existingDuration = $current.SelectSingleNode($duration)
+    $desiredDuration = $desired.SelectSingleNode($duration)
+    if (($null -eq $existingDuration) -ne ($null -eq $desiredDuration)) { return $false }
+    if ($null -ne $existingDuration -and $existingDuration.InnerText -ine $desiredDuration.InnerText) {
+        return $false
+    }
+
+    # StartBoundary ist absichtlich nicht Teil des Vergleichs (idempotente Installation).
     return $true
 }
 
