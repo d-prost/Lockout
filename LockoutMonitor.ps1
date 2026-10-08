@@ -5,7 +5,7 @@ param(
     [switch]$Once
 )
 $ErrorActionPreference = 'Stop'
-Import-Module (Join-Path $PSScriptRoot 'src\Lockout.Core.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'src\Lockout.Runner.psm1') -Force
 try {
     $config = Import-PowerShellDataFile -LiteralPath $ConfigPath
     Invoke-LockoutMonitor -Config $config
