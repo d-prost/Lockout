@@ -12,23 +12,6 @@ function Get-Fields {
     return $fields
 }
 
-function Write-JsonAtomic {
-    param([string]$Path, $Value)
-    $tmp = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
-    $utf8 = New-Object Text.UTF8Encoding($false)
-    try {
-        [IO.File]::WriteAllText($tmp, (ConvertTo-Json -InputObject $Value -Depth 10 -Compress), $utf8)
-        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($tmp,$Path,$null) }
-        else { [IO.File]::Move($tmp,$Path) }
-    } finally { if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force } }
-}
-
-function Read-Json {
-    param([string]$Path, $Default)
-    if (-not (Test-Path -LiteralPath $Path)) { return $Default }
-    return (Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json)
-}
-
 function ConvertTo-Record {
     param($Event,[string]$DomainController,[bool]$AlertEligible=$false)
     $data = Get-Fields $Event
