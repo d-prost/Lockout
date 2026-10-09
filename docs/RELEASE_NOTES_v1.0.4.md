@@ -24,7 +24,9 @@ No changes to state, outbox, journal format, Event 4740 evidence semantics, or d
 
 **After Storage-only fix:** [CI #37863383209](https://github.com/d-prost/Lockout/actions/runs/37863383209) passed Windows PowerShell 5.1 parsing, PSScriptAnalyzer Error-level checks, **49/49 Pester tests**, and synthetic 10,000/100,000-event ingestion/retention benchmarks.
 
-**Operator-reported live DC observation:** On a lab Windows Server DC, a two-event test collected both events once and reported `Status=OK` after the operator patched **both** Storage and Runner. The separate synthetic CI experiment isolated Storage as sufficient for that replicated case; the exact Storage-only patch has not yet been verified on the physical lab DC.
+**Merged main:** [CI #37864885314](https://github.com/d-prost/Lockout/actions/runs/37864885314) and [release workflow #37865326163](https://github.com/d-prost/Lockout/actions/runs/37865326163) both passed for commit `0ae46e7`.
+
+**Live lab verification after release (9 October 2026):** The official v1.0.4 commit `0ae46e7` (Storage-only fix, Runner unchanged) passed 13/13 checks on an isolated Windows Server 2025 DC. Three real 4740 events were recorded once each, two monitor runs returned `Status=OK`, the viewer and investigator returned matching evidence, and the data directory was removable after execution. The earlier two-file experimental patch is no longer the only available live evidence. See [sanitized acceptance](../verification/LAB_ACCEPTANCE.md).
 
 ## Operational guidance
 
