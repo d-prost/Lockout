@@ -150,7 +150,8 @@ function Write-JournalSegment {
         [datetime]$CollectedUtc = [datetime]::UtcNow
     )
     if ($Records.Count -eq 0) { throw 'Empty journal segment not allowed.' }
-    $ordered = @($Records | Sort-Object -Property RecordId)
+    # OrderedDictionary-Datenfelder explizit numerisch sortieren; die Quelldaten koennen absteigend eintreffen.
+    $ordered = @($Records | Sort-Object -Property { [long]$_.RecordId })
     $ids = @{}
     foreach ($record in $ordered) {
         $id = [long]$record.RecordId
