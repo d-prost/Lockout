@@ -1,4 +1,4 @@
-name: Publish production-oriented v1.0.3
+name: Publish production-oriented v1.0.4
 on:
   workflow_run:
     workflows: ["Windows PowerShell 5.1 tests"]
@@ -7,7 +7,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: initial-release-v1-0-3
+  group: initial-release-v1-0-4
   cancel-in-progress: false
 jobs:
   release:
@@ -29,13 +29,13 @@ jobs:
             echo "Successful CI commit is no longer the main branch head; skipping stale release."
             exit 0
           fi
-          if gh release view v1.0.3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release v1.0.3 already exists; no changes."
+          if gh release view v1.0.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v1.0.4 already exists; no changes."
             exit 0
           fi
-          gh release create v1.0.3 --repo "$GITHUB_REPOSITORY" \
+          gh release create v1.0.4 --repo "$GITHUB_REPOSITORY" \
             --target "$CI_COMMIT" \
-            --title "AD Account Lockout Monitor & Investigator v1.0.3" \
-            --notes-file docs/RELEASE_NOTES_v1.0.3.md \
+            --title "AD Account Lockout Monitor & Investigator v1.0.4" \
+            --notes-file docs/RELEASE_NOTES_v1.0.4.md \
             --latest
-          gh release view v1.0.3 --repo "$GITHUB_REPOSITORY" --json url,tagName
+          gh release view v1.0.4 --repo "$GITHUB_REPOSITORY" --json url,tagName
