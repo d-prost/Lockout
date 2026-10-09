@@ -87,3 +87,19 @@ An operator tested this branch with **Windows Server 2025, Windows PowerShell 5.
 **Evidence boundary:** this live test is reported by the operator; maintainers did not remotely access the DC or ingest raw Security XML. Only one DC, with lockout originating on the DC, was exercised. Tests did **not** prove Windows 11 remote caller mapping, 4776 identity correlation, second-DC processing, live SMTP, or least-privilege Scheduled Task behavior. See [sanitized report](../verification/LAB_ACCEPTANCE.md) and [issue #4](https://github.com/d-prost/Lockout/issues/4).
 
 **Decision:** accept correctness of the native 4740 field fix in the reported lab scenario, without claiming complete deployment certification.
+
+## v1.0.4 — two Event 4740 records per polling window
+
+The Windows Server lab revealed `Invalid segment range` whenever multiple lockouts were collected together, with source EventRecordIds normally returned newest-first.
+
+To prevent recurrence, the Pester suite now includes:
+
+- An explicitly descending `OrderedDictionary` journal batch (3753, 3523) requiring an ascending canonical segment and validated high-water mark.
+- A numeric-sort check using string IDs 10 and 2.
+- A simulated `Get-WinEvent` poll returning (3753, 3523) in one batch, followed by restart and duplicate/cursor assertions.
+
+**Red run:** [37863112331](https://github.com/d-prost/Lockout/actions/runs/37863112331) reproduces `Invalid segment range` on the monitor before the fix. Its other failure was an incomplete synthetic fixture corrected before the green run.
+
+**Green run:** [37863383209](https://github.com/d-prost/Lockout/actions/runs/37863383209) succeeds with an isolated numeric ordering change in Storage, with no change to Runner: Windows PowerShell 5.1 Pester **49/49**, zero PSScriptAnalyzer Error findings, and 10k/100k synthetic journal tests PASS.
+
+**Live acceptance boundary:** A real lab DC collected two lockouts after the operator changed both Storage and Runner. That supports end-to-end feasibility but does not isolate the Storage-only candidate against a real DC; an on-site follow-up may confirm it without changing the test result above. The fix is deliberately narrow.
