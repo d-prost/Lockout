@@ -73,6 +73,47 @@ Describe 'Journal recovery rejects untrusted segment metadata' {
             Should -Throw '*Overlapping journal*'
     }
 }
+Describe 'Real-shaped ordered 4740 dictionaries in one collection batch' {
+    BeforeEach {
+        $script:root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script:dc = 'dc01.example.test'
+        $script:key = Get-SourceKey -Name $script:dc
+    }
+    It 'writes descending OrderedDictionary inputs in ascending numeric RecordId order' {
+        # ConvertTo-Record liefert OrderedDictionary, kein PSCustomObject.
+        # Get-WinEvent liefert die juengsten Ereignisse normalerweise zuerst.
+        $newer = [ordered]@{
+            Key = 'new'; DomainController = $script:dc; RecordId = [long]3753; EventId = 4740
+            Account = 'labuser'; TargetSid = 'S-1-5-21-1-2-3-1000'
+            CallerComputer = 'LABDC01'; TimeUtc = [datetime]::UtcNow.ToString('o')
+            RootCause = 'Undetermined'; AlertEligible = $false
+        }
+        $older = [ordered]@{
+            Key = 'old'; DomainController = $script:dc; RecordId = [long]3523; EventId = 4740
+            Account = 'labuser'; TargetSid = 'S-1-5-21-1-2-3-1000'
+            CallerComputer = 'LABDC01'; TimeUtc = [datetime]::UtcNow.AddMinutes(-1).ToString('o')
+            RootCause = 'Undetermined'; AlertEligible = $false
+        }
+        $newer -is [System.Collections.Specialized.OrderedDictionary] | Should -BeTrue
+        $path = Write-JournalSegment -DataDirectory $script:root -DomainController $script:dc -Records @($newer,$older)
+        (Split-Path -Leaf $path) | Should -Be ('{0:D20}-{1:D20}.jsonl' -f [long]3523,[long]3753)
+        $rows = @(Read-JournalSegment -Path $path)
+        $rows.Count | Should -Be 2
+        [long]$rows[0].RecordId | Should -Be 3523
+        [long]$rows[1].RecordId | Should -Be 3753
+        (Get-LastJournalRecordId -DataDirectory $script:root -SourceKey $script:key) | Should -Be 3753
+    }
+    It 'sorts numeric RecordIds rather than lexical representations' {
+        $records = @(
+            [ordered]@{Key='ten';DomainController=$script:dc;RecordId='10';EventId=4740;Account='u';TimeUtc='2026-10-08T11:00:00Z';AlertEligible=$false},
+            [ordered]@{Key='two';DomainController=$script:dc;RecordId='2';EventId=4740;Account='u';TimeUtc='2026-10-08T10:00:00Z';AlertEligible=$false}
+        )
+        $path = Write-JournalSegment -DataDirectory $script:root -DomainController $script:dc -Records $records
+        $rows = @(Read-JournalSegment -Path $path)
+        [long]$rows[0].RecordId | Should -Be 2
+        [long]$rows[1].RecordId | Should -Be 10
+    }
+}
 Describe 'Task comparisons fail closed on security drift' {
     BeforeAll {
         $script:taskParams = @{
