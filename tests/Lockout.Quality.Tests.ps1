@@ -105,8 +105,8 @@ Describe 'Real-shaped ordered 4740 dictionaries in one collection batch' {
     }
     It 'sorts numeric RecordIds rather than lexical representations' {
         $records = @(
-            [ordered]@{Key='ten';DomainController=$script:dc;RecordId='10';EventId=4740;Account='u';TimeUtc='2026-10-08T11:00:00Z';AlertEligible=$false},
-            [ordered]@{Key='two';DomainController=$script:dc;RecordId='2';EventId=4740;Account='u';TimeUtc='2026-10-08T10:00:00Z';AlertEligible=$false}
+            [ordered]@{Key='ten';CallerComputer='SYNTHETIC';DomainController=$script:dc;RecordId='10';EventId=4740;Account='u';TimeUtc='2026-10-08T11:00:00Z';AlertEligible=$false},
+            [ordered]@{Key='two';CallerComputer='SYNTHETIC';DomainController=$script:dc;RecordId='2';EventId=4740;Account='u';TimeUtc='2026-10-08T10:00:00Z';AlertEligible=$false}
         )
         $path = Write-JournalSegment -DataDirectory $script:root -DomainController $script:dc -Records $records
         $rows = @(Read-JournalSegment -Path $path)
