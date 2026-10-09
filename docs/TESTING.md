@@ -9,7 +9,7 @@ GitHub Actions on Windows Server 2022 executes:
 3. Pester 5.7.1 synthetic event and failure-injection tests.
 4. Deterministic 10,000 and 100,000 synthetic event journal performance tests.
 
-The tests do **not** connect to any live Domain Controller, create actual account lockouts, deliver real SMTP, or register a real Windows Scheduled Task. Such end-to-end behavior is intentionally unverified and environment-specific.
+**GitHub Actions itself is offline:** its tests do not connect to a DC, lock accounts, send SMTP messages or register a real task. A separate Windows Server 2025 lab acceptance run has verified v1.0.4 single-DC collection and 4740/4771 investigation; see [lab acceptance](../verification/LAB_ACCEPTANCE.md). SMTP, scheduled-task and multi-DC acceptance remain open.
 
 ## Reliability scenarios
 
@@ -76,7 +76,7 @@ The upstream event-schema review and external verification found that native Eve
 
 The Account display name is now unqualified in new event records. TargetSid remains the stable discriminator for SMTP cooldown where available. Previously persisted journal events are not rewritten.
 
-The Windows/11-Proxmox manual integration procedure is documented in verification/PROXMOX_AD_LAB.md. Passing the synthetic test suite is not evidence of having read live DC Security events.
+The Proxmox lab procedure is documented in [verification/PROXMOX_AD_LAB.md](../verification/PROXMOX_AD_LAB.md). This section describes the original v1.0.2 regression; newer live results are documented separately below.
 
 ## v1.0.2 — documented live lab observation
 
@@ -84,7 +84,7 @@ An operator tested this branch with **Windows Server 2025, Windows PowerShell 5.
 
 **Independently checked GitHub CI:** [Run 37838548231](https://github.com/d-prost/Lockout/actions/runs/37838548231), head 08d82768, completed successfully with 44/44 Pester tests, no Error-level PSScriptAnalyzer findings, and 10k/100k synthetic journal benchmarks.
 
-**Evidence boundary:** this live test is reported by the operator; maintainers did not remotely access the DC or ingest raw Security XML. Only one DC, with lockout originating on the DC, was exercised. Tests did **not** prove Windows 11 remote caller mapping, 4776 identity correlation, second-DC processing, live SMTP, or least-privilege Scheduled Task behavior. See [sanitized report](../verification/LAB_ACCEPTANCE.md) and [issue #4](https://github.com/d-prost/Lockout/issues/4).
+**Historical v1.0.2 evidence:** this test established native 4740 mapping on one DC, with the lockout originating locally. Later v1.0.4 tests cover the earlier multiple-record regression and 4740/4771 correlation; the old 4776 discrepancy is [resolved](https://github.com/d-prost/Lockout/issues/4). See the [current lab report](../verification/LAB_ACCEPTANCE.md).
 
 **Decision:** accept correctness of the native 4740 field fix in the reported lab scenario, without claiming complete deployment certification.
 
@@ -102,4 +102,6 @@ To prevent recurrence, the Pester suite now includes:
 
 **Green run:** [37863383209](https://github.com/d-prost/Lockout/actions/runs/37863383209) succeeds with an isolated numeric ordering change in Storage, with no change to Runner: Windows PowerShell 5.1 Pester **49/49**, zero PSScriptAnalyzer Error findings, and 10k/100k synthetic journal tests PASS.
 
-**Live acceptance boundary:** A real lab DC collected two lockouts after the operator changed both Storage and Runner. That supports end-to-end feasibility but does not isolate the Storage-only candidate against a real DC; an on-site follow-up may confirm it without changing the test result above. The fix is deliberately narrow.
+**Post-release live verification (9 October 2026):** The exact released v1.0.4 commit `0ae46e7`, with the Storage-only fix and no Runner change, passed **13/13 checks** on a Windows Server 2025 lab DC. Three distinct 4740 RecordIds were collected once each, the monitor was OK after two runs, the journal used an ascending range, the viewer returned three records, the investigator returned 4740 and 4771 observations, and the data directory was deletable after execution. [Full sanitized result](../verification/LAB_ACCEPTANCE.md).
+
+[CI on merged main](https://github.com/d-prost/Lockout/actions/runs/37864885314) passed 49/49 Pester and 10k/100k benchmarks. Separate-client origin, unattended task, SMTP and multi-DC cases remain in [Issue #7](https://github.com/d-prost/Lockout/issues/7).
