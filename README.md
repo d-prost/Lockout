@@ -2,7 +2,7 @@
 
 A lightweight, read-only Active Directory account lockout monitor and investigator for **Windows PowerShell 5.1**. No database, web server, cloud subscription, PowerShell 7, or AD writes.
 
-**Production-oriented v1.0.x.** Windows CI with synthetic events and storage benchmarks is available. Live Windows Server, DC Security Log, Scheduled Task and SMTP integration have **not** been verified in a real customer environment. Deployers must authorize and assess their own environment; a release is not a security certification.
+**Current release: [v1.0.4](https://github.com/d-prost/Lockout/releases/tag/v1.0.4).** Windows CI is green, and a controlled Windows Server 2025 Domain Controller lab passed 13/13 live checks for single-DC collection, investigation and recovery. SMTP, unattended Scheduled Task, remote Windows 11 caller and multi-DC integration are still awaiting live acceptance. A lab pass is not a security or production certification.
 
 ## Scope
 
@@ -93,13 +93,15 @@ Investigation matches an account name within a bounded time window. It does not 
 
 ## Lab validation status
 
-**Operator-reported Windows Server 2025 Domain Controller test:** a real Security Event 4740 was successfully parsed by the patch; a second consecutive monitoring run stored no duplicate event. Windows PowerShell 5.1 Pester checks passed 44/44 both in the operator report and independently on [GitHub Actions #37838548231](https://github.com/d-prost/Lockout/actions/runs/37838548231).
+The released v1.0.4 commit (`0ae46e7`) passed **13/13 live checks** on an isolated Windows Server 2025 Domain Controller using Windows PowerShell 5.1. Three real 4740 events were collected once each, including multiple lockouts in a single poll; two consecutive monitor runs returned OK. The read-only viewer and investigator returned 4740/4771 evidence while leaving `RootCause = Undetermined`. The data directory was also removable after the run, with no lingering file handles.
 
-The lab lockout originated **on the DC itself**, so independent Windows 11 caller attribution, 4776/4771 account correlation, multi-DC retrieval, SMTP and actual least-privilege task registration are not yet established. See [sanitized lab acceptance report](verification/LAB_ACCEPTANCE.md) and [open 4776 investigation](https://github.com/d-prost/Lockout/issues/4). This is a verified single-DC scenario, not full production certification.
+[Windows CI](https://github.com/d-prost/Lockout/actions/runs/37864885314) passed **49/49 Pester tests**, PowerShell parsing, static analysis and 10k/100k synthetic benchmarks. The live lab run and CI are separate evidence sources.
+
+The lockout requests originated on the lab DC. A separate Windows 11 client, live SMTP/retry, unattended least-privilege Scheduled Task and second DC still need testing. See [lab acceptance](verification/LAB_ACCEPTANCE.md) and [remaining integration checklist](https://github.com/d-prost/Lockout/issues/7). The earlier [4776 investigation](https://github.com/d-prost/Lockout/issues/4) is resolved.
 
 ## Proxmox / Windows Server live lab
 
-A **Windows Server VM is not automatically a Domain Controller**. To test real 4740 collection, use an isolated lab DC with AD DS and a domain-joined Windows 11 VM. Consult [the lab integration guide](verification/PROXMOX_AD_LAB.md) and run the read-only, privacy-safe [4740 field verifier](verification/Test-Lab4740.ps1) after inducing a lockout manually for a disposable lab-only account.
+A **Windows Server VM is not automatically a Domain Controller**. To reproduce the verified single-DC checks or test a separate Windows 11 caller, follow the [lab procedure](verification/PROXMOX_AD_LAB.md). The [read-only 4740 verifier](verification/Test-Lab4740.ps1) works with existing test events from a disposable lab-only account.
 
 The previous v1.0.1 journal is intentionally immutable. Previously recorded WORKSTATION\USER labels may be misleading and are **not automatically rewritten**. A native 4740 account identifier is intentionally not domain-qualified without separate evidence; use TargetSid for unique identity where available.
 
@@ -117,7 +119,8 @@ The previous v1.0.1 journal is intentionally immutable. Previously recorded WORK
 - [Installation](docs/INSTALLATION.md)
 - [Troubleshooting and recovery](docs/TROUBLESHOOTING.md)
 - [Tests and 10k/100k benchmarks](docs/TESTING.md)
-- [Quality and simplification release](CHANGELOG.md)
+- [Changelog](CHANGELOG.md)
+- [Maintenance and branch policy](docs/MAINTENANCE.md)
 - [Security policy](SECURITY.md)
 - [Engineering review](docs/ENGINEERING_REVIEW.md)
 - [Microsoft Get-WinEvent](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.diagnostics/get-winevent?view=powershell-5.1)

@@ -10,7 +10,7 @@
 
 Evidence: red regression on unpatched v1.0.3 ([CI](https://github.com/d-prost/Lockout/actions/runs/37863112331)), followed by 49/49 Pester tests and 10k/100k synthetic benchmarks after the storage-only patch ([CI](https://github.com/d-prost/Lockout/actions/runs/37863383209)).
 
-The operator also reported correct two-event behavior on a real lab DC after changing both ordering sites; that manual observation does **not** independently prove the storage-only patch on a live DC. The regression suite isolates it under simulated Windows events.
+**Post-release verification (9 October 2026):** The exact v1.0.4 commit `0ae46e7` passed 13/13 live checks on the lab DC with the Storage-only fix. Three real 4740 records were stored once each; two monitor runs returned OK. The viewer, investigator and data-directory cleanup also passed. See [lab acceptance](verification/LAB_ACCEPTANCE.md).
 
 ## v1.0.3 — 2026-10-09
 
@@ -22,7 +22,7 @@ The operator also reported correct two-event behavior on a real lab DC after cha
 
 No journal schema, account-lockout event mapping, SMTP behavior or Active Directory configuration changes.
 
-## v1.0.2 candidate — Native Event 4740 correctness
+## v1.0.2 — Native Event 4740 correctness
 
 - Fix StrictMode exceptions on empty EventData nodes using XML InnerText.
 - Read native 4740 caller name from TargetDomainName while preserving explicit normalized CallerComputerName when present.
@@ -32,7 +32,7 @@ No journal schema, account-lockout event mapping, SMTP behavior or Active Direct
 - Support qualified/unqualified historical account filters without claiming native domain validation.
 - Add Pester regression fixtures and an isolated Proxmox Windows Server/Windows 11 real-event verification guide.
 
-Live lab integration remains pending; the historical journal is not rewritten automatically.
+At release time, live lab integration was pending. The current v1.0.4 acceptance is documented separately; historical journal records were not rewritten.
 
 ## v1.0.1 — 2026-10-08
 

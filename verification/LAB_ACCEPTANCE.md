@@ -1,56 +1,64 @@
-# Live lab acceptance — Event 4740 field mapping
+# Lab acceptance
 
-## Evidence classification
+Updated: 9 October 2026  
+Release: [v1.0.4](https://github.com/d-prost/Lockout/releases/tag/v1.0.4)  
+Commit: `0ae46e7d4e5599717f6dd1e0b7d50265a23048c0`
 
-This document records an **operator-reported** controlled lab execution of the candidate v1.0.2 patch. Results were provided by the operator, not independently reproduced through a direct connection by repository maintainers. No raw Security Event XML, secrets, private IP address or personnel data is stored here.
+The following results are from an isolated Windows Server 2025 lab Domain Controller, using Windows PowerShell 5.1 and a disposable domain test account. They were recorded during manual lab runs, not collected by GitHub Actions. The lab did not use a separate client as the lockout source.
 
-## Environment
+## v1.0.4 — live DC acceptance
 
-- Isolated Proxmox-hosted Windows Server 2025 VM, promoted to a lab Domain Controller.
-- Windows PowerShell 5.1; account lockout audit success configured for the lab.
-- Disposable non-privileged test user; lab-only policy: three failed attempts / 30-minute lockout.
-- Lockout achieved via failed LDAP authentication attempts on the **DC itself**, not via a separate Windows 11 client.
-- After an audit delay, a real Security Event ID 4740 was observed.
-
-## Operator-observed acceptance
-
-| Scenario | Result | Interpretation |
+| Check | Result | Notes |
 | --- | --- | --- |
-| Parser Pester, Windows PowerShell 5.1 | 44 / 44 PASS | Matches independently observed GitHub Actions results |
-| Real Event 4740 parsed | PASS | Data fields processed without empty-node exception |
-| Caller evidence | Event4740TargetDomainName | Native event exposed the reported caller in TargetDomainName |
-| Caller compared with expected lab host | TRUE | The reported caller was the DC itself |
-| Account incorrectly prefixed with caller | FALSE | Stored Account is the unqualified test username |
-| Source IP established | FALSE | No unsupported IP inference |
-| Root cause | Undetermined | No automatic causality inference |
-| Two sequential monitor runs | OK / OK | One canonical event stored, no replay |
-| Read-only history viewer | PASS | Test event shown correctly |
-| Investigation Event 4740 | PASS | Expected caller observation shown |
+| Pester suite on Windows PowerShell 5.1 | PASS | 49 passed, 0 failed |
+| Test account locked out | PASS | Disposable lab account |
+| Real Security Event 4740 present | PASS | Latest test event observed |
+| 4740 caller from TargetDomainName | PASS | Matches the lab DC |
+| No false account prefix, source IP or root-cause attribution | PASS | IP absent, RootCause = Undetermined |
+| Monitor healthy after two runs | PASS | Status = OK |
+| No duplicate RecordIds | PASS | Three distinct 4740 records |
+| Newest real 4740 collected | PASS | Third lockout included |
+| Account label unqualified | PASS | No workstation/domain prefix |
+| Read-only history viewer | PASS | Three records returned |
+| Investigator returned 4740 and 4771 evidence | PASS | Seven evidence rows |
+| Investigator preserved root-cause uncertainty | PASS | RootCause = Undetermined |
+| Data directory could be deleted after execution | PASS | No remaining open file handles |
 
-The operator reported the actual lockout account attribute as LockedOut=True before the event appeared.
+**Live acceptance: 13/13 PASS.** The canonical journal retained all three observed lockouts once each. The previous `Invalid segment range` failure with multiple events in one poll did not recur with the released storage-only fix.
 
-## Independently verifiable GitHub CI
+The Kerberos client address was the IPv6 loopback address `::1`, consistent with authentication attempts originating on the DC itself. The caller in 4740 identified the same lab DC. Neither field proves an external source IP or a root cause.
 
-[Windows PowerShell 5.1 Action #37838548231](https://github.com/d-prost/Lockout/actions/runs/37838548231) passed:
+## Windows CI for the release
 
-- PowerShell parser and PSScriptAnalyzer (no Error-level findings)
-- 44 / 44 Pester unit/regression tests
-- 10,000 / 100,000 synthetic journal/retention benchmarks
+[Windows PowerShell 5.1 CI for commit 0ae46e7](https://github.com/d-prost/Lockout/actions/runs/37864885314):
 
-These tests verify the candidate code, not the operator's real-DC environment.
+- PowerShell parsing: PASS
+- PSScriptAnalyzer Error-level findings: 0
+- Pester: 49 passed, 0 failed
+- Synthetic journal and retention benchmarks: 10,000 and 100,000 events PASS
 
-## Unresolved investigations and production gaps
+The [v1.0.4 release workflow](https://github.com/d-prost/Lockout/actions/runs/37865326163) also passed. CI uses synthetic events; the checks above are separate live-lab observations.
 
-1. Five 4776 events existed in the lab DC Security log, but no matching 4776 rows appeared in the account-filtered Investigator. Confirm exact EventData.TargetUserName values, EventTime, authentication status and search window using sanitized diagnostics; avoid claiming missing audit events or a broken parser without this evidence.
-2. The lab exercise did not verify a caller on a **separate domain-joined Windows 11 host**.
-3. No second DC, SMTP relay, or real Scheduled Task execution under a delegated service account was used.
-4. Synthetic tests did not characterize Security log rollover on a real DC, or disruption of a production network.
-5. Existing v1.0.1 journal events with incorrectly qualified account names are preserved as originally recorded. This patch does not retroactively rewrite journal data.
+## Earlier findings and resolution
 
-## Acceptance decision
+- **v1.0.2:** real Event 4740 parsing and caller field mapping were confirmed. Empty XML fields and false `WORKSTATION\USER` prefixes had been corrected.
+- **v1.0.3:** JSONL reader handles are disposed after errors. The v1.0.4 live run also confirmed that the data directory was releasable.
+- **v1.0.4:** the official, unmodified storage-only fix collected multiple real 4740 records in one poll, wrote them in ascending numeric RecordId order, and did not duplicate them after a second run.
+- **4776 investigation:** the five earlier 4776 entries were successful (`0x0`) and belonged to a different account. Failure auditing was initially off. Once enabled, six 4771 failures and the 4740 event were returned for the lab account, with `RootCause = Undetermined`. This explains the old discrepancy; [Issue #4](https://github.com/d-prost/Lockout/issues/4) is closed.
 
-**PASS:** native Event 4740 parsing and basic single-DC monitor/investigator operation for the tested Windows Server 2025 lab scenario.
+Previous release test counts (44/44 for v1.0.2 and 46/46 for v1.0.3) remain historical results, not the current acceptance baseline.
 
-**NOT YET VERIFIED:** cross-host caller fidelity, multi-DC collection, SMTP, least-privilege scheduled deployment and the unmatched 4776 evidence.
+## Not yet tested
 
-The limited lab PASS is not equivalent to all-feature production certification. Detailed reproduction steps: [PROXMOX_AD_LAB.md](PROXMOX_AD_LAB.md).
+- Lockout originating from a **separate domain-joined Windows 11 workstation**.
+- Scheduled Task running under a dedicated least-privilege account, including unattended operation.
+- SMTP delivery, failed-send retry and cooldown against an actual test relay.
+- Two live DCs, including per-DC cursor isolation and temporary loss of one DC.
+
+These checks are tracked in [Issue #7](https://github.com/d-prost/Lockout/issues/7). Do not infer them from the successful single-DC run.
+
+## Handling of lab evidence
+
+Only summarized, sanitized results belong in this public repository. Do not commit raw Security Event XML, usernames, SIDs, actual domain names, workstation addresses, credentials or copied runtime journal data. Lockout generation and account cleanup were limited to the isolated lab.
+
+**Decision:** v1.0.4 passes single-DC live acceptance for collection, cursor/deduplication, 4740/4771 evidence handling and file cleanup. Full production integration is not yet signed off.

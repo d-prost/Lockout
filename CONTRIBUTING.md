@@ -2,7 +2,7 @@
 
 The project targets Windows PowerShell 5.1 and minimum operational dependencies. PRs should preserve read-only Active Directory behavior, explicit evidence/attribution boundaries, and durable journal-before-checkpoint ordering.
 
-Before proposing changes, add Pester coverage for failure and restart cases. Run the repository's Windows Actions workflow for syntax, PSScriptAnalyzer, reliability tests and synthetic performance. Network or SMTP integration claims require documented evidence from a controlled test environment.
+Before proposing changes, add Pester coverage for failure and restart cases. Open a PR and require the `validate` Windows Actions job to pass for syntax, PSScriptAnalyzer, reliability tests and synthetic performance. Network or SMTP integration claims require documented evidence from a controlled test environment. See [maintenance policy](docs/MAINTENANCE.md).
 
 Do not include real usernames, workstation names, Domain Controller identifiers, event logs, IP addresses, credentials or internal company data in public issues, tests or PRs. Use synthetic anonymized fixtures.
 
