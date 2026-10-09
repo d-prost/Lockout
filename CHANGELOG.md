@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.0.4 — 2026-10-09
+
+- Fix collection failure (`Invalid segment range`) when more than one native Event 4740 is returned in a single poll, including newest-first EventRecordId ordering.
+- Sort canonical journal records by an explicit numeric `[long] RecordId` expression. This handles the OrderedDictionary values produced by the XML converter.
+- Add three Pester regression tests covering descending multi-event journals, numeric RecordId sorting, and an end-to-end newest-first single-batch monitor run with cursor persistence and no duplicate replay.
+- Keep `Lockout.Runner.psm1` unchanged: a storage-only patch passed the same regression tests in isolation, so the additional raw-event sort change was not necessary for this verified scenario.
+- No changes to immutable JSONL records, cursor or outbox formats, account fields, credentials or Active Directory permissions.
+
+Evidence: red regression on unpatched v1.0.3 ([CI](https://github.com/d-prost/Lockout/actions/runs/37863112331)), followed by 49/49 Pester tests and 10k/100k synthetic benchmarks after the storage-only patch ([CI](https://github.com/d-prost/Lockout/actions/runs/37863383209)).
+
+The operator also reported correct two-event behavior on a real lab DC after changing both ordering sites; that manual observation does **not** independently prove the storage-only patch on a live DC. The regression suite isolates it under simulated Windows events.
+
 ## v1.0.3 — 2026-10-09
 
 - Close JSONL StreamReader handles deterministically using try/finally, including on corrupted event records and journal tail validation errors.
