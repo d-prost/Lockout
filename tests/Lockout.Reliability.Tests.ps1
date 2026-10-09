@@ -100,6 +100,30 @@ Describe 'Restart and source failures' {
         @(Get-TestRows $script:root $script:dcA).Count | Should -Be 2
     }
 
+    It 'collects two real-shaped 4740 events arriving newest-first in a single batch' {
+        # Eine RPC-Abfrage enthaelt mehrere RecordIds (wie im echten DC-Labor).
+        $global:LockoutFixture.Events[$script:dcA] = @(
+            (New-TestEvent 3753 $script:dcA 'labuser'),
+            (New-TestEvent 3523 $script:dcA 'labuser')
+        )
+        $global:LockoutFixture.Latest[$script:dcA] = [long]3753
+        $global:LockoutFixture.Oldest[$script:dcA] = [long]3523
+        $script:config.BatchRecords = 2
+        $script:config.RecordWindowSize = 1000
+        Invoke-LockoutMonitor -Config $script:config
+        $rows = @(Get-TestRows $script:root $script:dcA)
+        $rows.Count | Should -Be 2
+        [long]$rows[0].RecordId | Should -Be 3523
+        [long]$rows[1].RecordId | Should -Be 3753
+        (Get-TestCursor $script:root $script:dcA).Cursor | Should -Be 3753
+        $sourceKey = Get-SourceKey -Name $script:dcA
+        @(Get-JournalSegments -DataDirectory $script:root -SourceKey $sourceKey).Count | Should -Be 1
+        (Read-Json -Path (Join-Path $script:root 'heartbeat.json') -Default $null).Status | Should -Be 'OK'
+        Invoke-LockoutMonitor -Config $script:config
+        @(Get-TestRows $script:root $script:dcA).Count | Should -Be 2
+        (Get-TestCursor $script:root $script:dcA).Cursor | Should -Be 3753
+    }
+
     It 'restarts from persisted cursor without duplicating events' {
         $global:LockoutFixture.Events[$script:dcA] = @(New-TestEvent 1 $script:dcA)
         Invoke-LockoutMonitor -Config $script:config
