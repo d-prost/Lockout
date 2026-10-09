@@ -43,11 +43,11 @@ If the event is absent, verify audit policy, PDC Emulator and which DC handled t
 
 ## 4. Privacy-safe field mapping check
 
-From the candidate PR branch, in Windows PowerShell 5.1 at the repository root:
+From the released `v1.0.4` checkout, in Windows PowerShell 5.1 at the repository root:
 
     .\verification\Test-Lab4740.ps1 -DomainController $dc -ExpectedCaller 'WIN11-LAB'
 
-The script reports field-presence flags and compares the observed caller against an expected lab host. It does **not** print the usernames, SIDs or computer names contained in the actual Security Event.
+The script reports field-presence flags and compares the observed caller against an expected lab host. It does **not** print the usernames, SIDs or computer names contained in the actual Security Event. The DC-local lockout case is already covered in the [v1.0.4 acceptance report](LAB_ACCEPTANCE.md); the separate Windows 11 caller check is still pending.
 
 Expected for a native 4740 with a caller:
 
@@ -73,7 +73,7 @@ Check the matching RecordId, observed caller, no false WORKSTATION\USER prefix, 
 
 ## 6. Privacy and limitations
 
-Share only the sanitized output from the lab verification script. Do not publish real production Security Event XML; it can disclose names, SIDs and domain identifiers.
+Share only sanitized results, without raw Security Event XML, personal names, SIDs, domain identifiers, private hostnames or IP addresses. The outstanding integration checks are tracked in [Issue #7](https://github.com/d-prost/Lockout/issues/7).
 
 - Event 4740 does not by itself establish a source IP or proven root cause.
 - The monitor still fails closed on malformed events (poison pill), while the on-demand investigator skips malformed items with warnings.
